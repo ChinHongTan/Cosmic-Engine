@@ -1,6 +1,6 @@
 use std::fmt;
 use std::fmt::Formatter;
-use crate::piece::{King, Pawn, Piece, PieceEnum};
+use crate::piece::{King, Knight, Pawn, Piece, PieceEnum};
 
 pub struct Board {
     board_state: [[Option<PieceEnum>; 8]; 8],
@@ -13,6 +13,7 @@ impl fmt::Display for Board {
                 let symbol = match cell {
                     Some(PieceEnum::Pawn(_)) => 'P',
                     Some(PieceEnum::King(_)) => 'K',
+                    Some(PieceEnum::Knight(_)) => 'N',
                     None => '.',
                 };
                 write!(f, "{}", symbol)?;
@@ -45,9 +46,8 @@ impl Board {
             let deltas: &[(i32, i32)] = match &piece {
                 PieceEnum::Pawn(_) => Pawn::MOVE_DELTA,
                 PieceEnum::King(_) => King::MOVE_DELTA,
+                PieceEnum::Knight(_) => Knight::MOVE_DELTA,
             };
-
-            let (dx, dy) = deltas[0];
 
             for (dx, dy) in deltas {
                 let new_x = (start_x as i32 + dx) as usize;
@@ -57,6 +57,9 @@ impl Board {
 
             if possible_moves.contains(&target_pos) {
                 self.board_state[target_y][target_x] = Some(piece);
+            } else {
+                println!("Invalid move!");
+                self.board_state[start_y][start_x] = Some(piece);  // Do not move
             }
 
         }

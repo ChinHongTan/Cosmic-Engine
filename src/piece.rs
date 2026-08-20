@@ -5,6 +5,7 @@ use std::fmt::Formatter;
 pub enum PieceEnum {
     Pawn(Pawn),
     King(King),
+    Knight(Knight),
 }
 
 impl fmt::Display for PieceEnum {
@@ -35,5 +36,18 @@ impl Piece for King {
         (-1, -1), (0, -1), (1, -1),
         (-1,  0),          (1,  0),
         (-1,  1), (0,  1), (1,  1),
+    ];
+}
+
+#[derive(Clone, Copy)]
+pub struct Knight {
+}
+
+impl Piece for Knight {
+    const MOVE_DELTA: &[(i32, i32)] = &[
+                  (-1, -2), (1, -2),
+        (-2, -1),                   (2, -1),
+        (-2,  1),                   (2, 1),
+                  (-1,  2), (1,  2)
     ];
 }
