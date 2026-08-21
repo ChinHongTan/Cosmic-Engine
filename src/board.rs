@@ -49,23 +49,18 @@ impl Board {
             for (dx, dy) in deltas {
                 let mut new_x = (start_x as i32 + dx) as usize;
                 let mut new_y = (start_y as i32 + dy) as usize;
-                if new_x >= 8 || new_y >= 8 {
-                    println!("Not possible!");
-                    continue;
-                }
-                possible_moves.push((new_x, new_y));
-
-                if slider == true {
-                    loop {
-                        new_x = (new_x as i32 + dx) as usize;
-                        new_y = (new_y as i32 + dy) as usize;
-
-                        if new_x >= 8 || new_y >= 8 {
-                            break;
-                        }
-
-                        possible_moves.push((new_x, new_y));
+                while new_x <= 7 && new_y <= 7 {
+                    possible_moves.push((new_x, new_y));
+                    // if not slider
+                    if slider == false {
+                        break
                     }
+                    // If blocked by something
+                    if let Some(_target_piece) = self.board_state[new_y][new_x] {
+                        break
+                    }
+                    new_x = (new_x as i32 + dx) as usize;
+                    new_y = (new_y as i32 + dy) as usize;
                 }
             }
 
