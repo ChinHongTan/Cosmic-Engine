@@ -1,6 +1,7 @@
 use std::fmt;
 use std::fmt::Formatter;
 use crate::piece::{PieceEnum};
+use crate::piece::{Rook, Knight, Bishop, Queen, King, Pawn};
 
 pub struct Board {
     board_state: [[Option<PieceEnum>; 8]; 8],
@@ -15,6 +16,8 @@ impl fmt::Display for Board {
                     Some(PieceEnum::King(_)) => 'K',
                     Some(PieceEnum::Knight(_)) => 'N',
                     Some(PieceEnum::Rook(_)) => 'R',
+                    Some(PieceEnum::Bishop(_)) => 'B',
+                    Some(PieceEnum::Queen(_)) => 'Q',
                     None => '.',
                 };
                 write!(f, "{}", symbol)?;
@@ -28,7 +31,17 @@ impl fmt::Display for Board {
 impl Board {
     pub fn new() -> Board {
         Board {
-            board_state: [[None; 8]; 8],
+            // board_state: [[None; 8]; 8],
+            board_state: [
+                [Some(PieceEnum::Rook(Rook)), Some(PieceEnum::Knight(Knight)), Some(PieceEnum::Bishop(Bishop)), Some(PieceEnum::Queen(Queen)), Some(PieceEnum::King(King)), Some(PieceEnum::Bishop(Bishop)), Some(PieceEnum::Knight(Knight)), Some(PieceEnum::Rook(Rook))],
+                [Some(PieceEnum::Pawn(Pawn)); 8],
+                [None; 8],
+                [None; 8],
+                [None; 8],
+                [None; 8],
+                [Some(PieceEnum::Pawn(Pawn)); 8],
+                [Some(PieceEnum::Rook(Rook)), Some(PieceEnum::Knight(Knight)), Some(PieceEnum::Bishop(Bishop)), Some(PieceEnum::Queen(Queen)), Some(PieceEnum::King(King)), Some(PieceEnum::Bishop(Bishop)), Some(PieceEnum::Knight(Knight)), Some(PieceEnum::Rook(Rook))],
+            ]
         }
     }
 
