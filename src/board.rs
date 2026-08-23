@@ -91,8 +91,24 @@ impl Board {
 
         let mut possible_moves: Vec<(usize, usize)> = vec![];
 
-        let deltas = piece.kind.move_delta();
+        let mut deltas = piece.kind.move_delta();
         let slider = piece.kind.is_slider();
+        let mut pawn_deltas: Vec<(i32, i32)> = Vec::new();
+
+        if piece.kind == Pawn {
+            if piece.color == White {
+                if start_y == 1 {
+                    pawn_deltas.push((0, 2));
+                }
+                pawn_deltas.push((0, 1));
+            } else {
+                if start_y == 6 {
+                    pawn_deltas.push((0, -2));
+                }
+                pawn_deltas.push((0, -1));
+            };
+            deltas = pawn_deltas.as_slice()
+        }
 
         for (dx, dy) in deltas {
             let mut new_x = start_x as i32 + dx;

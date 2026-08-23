@@ -53,7 +53,7 @@ impl Kind {
 
     pub fn move_delta(self) -> &'static[(i32, i32)] {
         match self {
-            Pawn => &[(0, 1)],
+            Pawn => &[],
             King | Queen => {
                 &[
                     (-1, -1), (0, -1), (1, -1),

@@ -2,6 +2,7 @@ use crate::board::Board;
 
 mod board;
 mod piece;
+mod movegen;
 
 fn main() {
     let mut board = Board::new();
