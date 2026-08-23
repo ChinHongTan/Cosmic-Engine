@@ -1,6 +1,7 @@
 use std::fmt;
 use std::fmt::Formatter;
-use crate::piece::{Color, Kind, Piece};
+use crate::piece::{Kind, Piece};
+use crate::piece::Color::{Black, White};
 use crate::piece::Kind::{Rook, Knight, Bishop, Queen, King, Pawn};
 
 pub struct Board {
@@ -31,10 +32,10 @@ impl Board {
         let mut board_state = [[None; 8]; 8];
         for file in 0..8 {
             let kind = BACK_RANK[file];
-            board_state[7][file] = Some(Piece { kind, color: Color::Black });
-            board_state[6][file] = Some(Piece { kind: Pawn, color: Color::Black });
-            board_state[1][file] = Some(Piece { kind: Pawn, color: Color::White });
-            board_state[0][file] = Some(Piece { kind, color: Color::White });
+            board_state[7][file] = Some(Piece { kind, color: Black });
+            board_state[6][file] = Some(Piece { kind: Pawn, color: Black });
+            board_state[1][file] = Some(Piece { kind: Pawn, color: White });
+            board_state[0][file] = Some(Piece { kind, color: White });
         }
 
         Board { board_state }
@@ -43,6 +44,27 @@ impl Board {
     pub fn add_piece(&mut self, coordinate_x: usize, coordinate_y: usize, piece: Piece) -> &mut Self {
         self.board_state[coordinate_y][coordinate_x] = Some(piece);
         self
+    }
+
+    // 8/8/8/8/8/8/8/N7
+    pub fn from_fen(fen: &str) -> Board {
+        let mut board_state = [[None; 8]; 8];
+        let placement = fen.split(" ").next().unwrap(); // get the first part of string
+
+        for (i, rank_str) in placement.split("/").enumerate() {
+            let rank = 7 - i;
+            let mut file: usize = 0;
+            for c in rank_str.chars() {
+                if c.is_digit(10) {
+                    file += c.to_digit(10).unwrap() as usize;
+                } else {
+                    board_state[rank][file] = Some(Kind::char_to_piece(c));
+                    file += 1;
+                }
+            }
+        }
+
+        Board { board_state }
     }
 
     pub fn make_move(&mut self, starting_pos: (usize, usize), target_pos: (usize, usize)) {
@@ -59,13 +81,9 @@ impl Board {
                 let mut new_x = start_x as i32 + dx;
                 let mut new_y = start_y as i32 + dy;
                 while (0..8).contains(&new_x) && (0..8).contains(&new_y) {
-                    // if not slider
-                    if slider == false {
-                        break
-                    }
                     // If blocked by something
                     if let Some(target_piece) = self.board_state[new_y as usize][new_x as usize] {
-                        if (target_piece.color == piece.color) {
+                        if target_piece.color == piece.color {
                             break
                         } else {
                             possible_moves.push((new_x as usize, new_y as usize));
@@ -73,6 +91,10 @@ impl Board {
                         }
                     }
                     possible_moves.push((new_x as usize, new_y as usize));
+                    // if not slider, stop checking
+                    if slider == false {
+                        break
+                    }
                     new_x = new_x + dx;
                     new_y = new_y + dy;
                 }
