@@ -1,5 +1,6 @@
 use std::fmt;
 use std::fmt::Formatter;
+use std::ops::Not;
 use crate::piece::Color::{Black, White};
 use crate::piece::Kind::{Bishop, King, Knight, Pawn, Queen, Rook};
 
@@ -103,6 +104,17 @@ impl fmt::Display for Kind {
 pub enum Color {
     Black,
     White
+}
+
+impl Not for Color {
+    type Output = Self;
+
+    fn not(self) -> Self::Output {
+        match self {
+            Black => White,
+            White => Black
+        }
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
