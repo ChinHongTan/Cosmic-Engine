@@ -4,9 +4,11 @@ use crate::piece::{Color, Kind, Piece};
 use crate::piece::Color::{Black, White};
 use crate::piece::Kind::{Rook, Knight, Bishop, Queen, King, Pawn};
 
+#[derive(Debug)]
 pub struct Board {
     board_state: [[Option<Piece>; 8]; 8],
-    turn: Color
+    turn: Color,
+    en_passant: Option<(usize, usize)>
 }
 
 impl fmt::Display for Board {
@@ -39,7 +41,7 @@ impl Board {
             board_state[0][file] = Some(Piece { kind, color: White });
         }
 
-        Board { board_state, turn: White }
+        Board { board_state, turn: White, en_passant: None }
     }
 
     pub fn _add_piece(&mut self, coordinate_x: usize, coordinate_y: usize, piece: Piece) -> &mut Self {
@@ -73,42 +75,44 @@ impl Board {
             _ => panic!("Unknown turn state.")
         };
 
-        Board { board_state, turn }
+        let _castling = fen_component.next().unwrap();
+        let en_passant_str = fen_component.next().unwrap();
+        let mut file: i32 = -1;
+        let mut rank: i32 = -1;
+
+        if en_passant_str != "-" {
+            let en_passant_file_string = en_passant_str.chars().next().unwrap().to_string();
+            let en_passant_file = en_passant_file_string.as_str();
+            let en_passant_rank = en_passant_str.chars().next().unwrap().to_digit(10).unwrap() as i32;
+            file = match &en_passant_file {
+                &"a" => 0,
+                &"b" => 1,
+                &"c" => 2,
+                &"d" => 3,
+                &"e" => 4,
+                &"f" => 5,
+                &"g" => 6,
+                &"h" => 7,
+                _ => panic!("Unknown file!")
+            };
+            rank = en_passant_rank + 1;
+        }
+
+        let en_passant: Option<(usize, usize)>;
+        if file != -1 && rank != -1 {
+            en_passant = Some((rank as usize, file as usize));
+        } else {
+            en_passant = None;
+        }
+
+        Board { board_state, turn, en_passant }
     }
 
-    pub fn make_move(&mut self, starting_pos: (usize, usize), target_pos: (usize, usize)) {
-        let (start_x, start_y) = starting_pos;
-        let (target_x, target_y) = target_pos;
-
-        let Some(piece) = self.board_state[start_y][start_x] else {
-            return
-        };
-
-        if piece.color != self.turn {
-            println!("Invalid move!");
-            return
-        }
-
-        let mut possible_moves: Vec<(usize, usize)> = vec![];
-
-        let mut deltas = piece.kind.move_delta();
+    fn piece_moves(&self, piece: Piece, starting_pos: (usize, usize)) -> Vec<(usize, usize)> {
+        let deltas = piece.kind.move_delta();
         let slider = piece.kind.is_slider();
-        let mut pawn_deltas: Vec<(i32, i32)> = Vec::new();
-
-        if piece.kind == Pawn {
-            if piece.color == White {
-                if start_y == 1 {
-                    pawn_deltas.push((0, 2));
-                }
-                pawn_deltas.push((0, 1));
-            } else {
-                if start_y == 6 {
-                    pawn_deltas.push((0, -2));
-                }
-                pawn_deltas.push((0, -1));
-            };
-            deltas = pawn_deltas.as_slice()
-        }
+        let (start_x, start_y) = starting_pos;
+        let mut possible_moves: Vec<(usize, usize)> = Vec::new();
 
         for (dx, dy) in deltas {
             let mut new_x = start_x as i32 + dx;
@@ -132,6 +136,89 @@ impl Board {
                 new_y = new_y + dy;
             }
         }
+        possible_moves
+    }
+
+    fn pawn_moves(&self, piece: Piece, starting_pos: (usize, usize)) -> Vec<(usize, usize)> {
+        let mut possible_moves: Vec<(usize, usize)> = Vec::new();
+        let (start_x, start_y) = starting_pos;
+        let (dy, start_rank) = match piece.color {
+            Black => {
+                (-1i32, 6)
+            }
+            White => {
+                (1, 1)
+            }
+        };
+
+        let new_y = (start_y as i32 + dy) as usize;
+
+        // Diagonal captures
+        for dx in [-1i32, 1] {
+            // Not in range of the board
+            if !(0..8).contains(&(dx + start_x as i32)) || !(0..8).contains(&(dy + start_y as i32)) {
+                println!("Not in range!");
+                break
+            }
+
+            let new_x = (start_x as i32 + dx) as usize;
+
+            if let Some(p) = self.board_state[new_y][new_x] && p.color != piece.color {
+                possible_moves.push((new_x, new_y));
+            }
+        }
+
+        println!("{:?}", self.en_passant);
+
+        if let Some(p) = self.en_passant {
+            println!("En passant!");
+            println!("{} {}", p.0, p.1);
+            possible_moves.push((p.0, p.1))
+        }
+
+        // Front
+        // if not blocked
+        let None = self.board_state[new_y][start_x] else {
+            return possible_moves;
+        };
+
+        possible_moves.push((start_x, new_y));
+
+        let new_2y = (start_y as i32 + 2 * dy) as usize;
+
+        // Two steps ahead
+        if let Some(_p) = self.board_state[new_2y][start_x] {
+            return possible_moves;
+        } else {
+            if start_y == start_rank {
+                possible_moves.push((start_x, new_2y));
+            }
+        };
+
+        possible_moves
+    }
+
+    fn valid_move(&self, piece: Piece, starting_pos: (usize, usize)) -> Vec<(usize, usize)> {
+        match piece.kind {
+            Pawn => self.pawn_moves(piece, starting_pos),
+            _ => self.piece_moves(piece, starting_pos),
+        }
+    }
+
+    pub fn make_move(&mut self, starting_pos: (usize, usize), target_pos: (usize, usize)) {
+        let (start_x, start_y) = starting_pos;
+        let (target_x, target_y) = target_pos;
+
+        let Some(piece) = self.board_state[start_y][start_x] else {
+            return
+        };
+
+        if piece.color != self.turn {
+            println!("Invalid move!");
+            return
+        }
+
+        let possible_moves = self.valid_move(piece, starting_pos);
 
         println!("{:?}", possible_moves);
 
@@ -139,6 +226,14 @@ impl Board {
             if self.board_state[target_y][target_x] != None {
                 // Capture logic, maybe push them into an array in the future?
                 let _captured_piece = self.board_state[target_y][target_x].take().unwrap();
+            }
+            if piece.kind == Pawn && Some(target_pos) == self.en_passant {
+                self.board_state[start_y][target_x] = None;
+            }
+            if piece.kind == Pawn && (target_y as i32 - start_y as i32).abs() == 2 {
+                self.en_passant = Some((start_x, (start_y + target_y) / 2));
+            } else {
+                self.en_passant = None; // clear en_passant
             }
             self.board_state[start_y][start_x] = None; // Take the piece
             self.board_state[target_y][target_x] = Some(piece); // And place it
