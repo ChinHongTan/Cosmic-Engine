@@ -82,10 +82,7 @@ impl Board {
         let en_passant = match en_passant_str {
             "_" => None,
             _ => {
-                let mut chars = en_passant_str.chars();
-                let file = chars.next().unwrap() as u8 - b'a'; // subtract by ASCII, 'a'...'h' → 0...7
-                let rank = chars.next().unwrap() as u8 - b'1';
-                Some((rank as usize, file as usize))
+                square_to_coordinate(en_passant_str)
             }
         };
 
@@ -182,13 +179,6 @@ impl Board {
         possible_moves
     }
 
-    fn valid_move(&self, piece: Piece, starting_pos: (usize, usize)) -> Vec<(usize, usize)> {
-        match piece.kind {
-            Pawn => self.pawn_moves(piece, starting_pos),
-            _ => self.piece_moves(piece, starting_pos),
-        }
-    }
-
     pub fn make_move(&mut self, starting_pos: (usize, usize), target_pos: (usize, usize)) {
         let (start_x, start_y) = starting_pos;
         let (target_x, target_y) = target_pos;
@@ -202,7 +192,10 @@ impl Board {
             return
         }
 
-        let possible_moves = self.valid_move(piece, starting_pos);
+        let possible_moves = match piece.kind {
+            Pawn => self.pawn_moves(piece, starting_pos ),
+            _ => self.piece_moves(piece, starting_pos),
+        };
 
         println!("{:?}", possible_moves);
 
@@ -230,4 +223,15 @@ impl Board {
     pub fn print_board(&self) {
         println!("Board: \n{}", self);
     }
+}
+
+fn square_to_coordinate(s: &str) -> Option<(usize, usize)> {
+    let mut chars = s.chars();
+    let file = chars.next().unwrap() as u8 - b'a'; // subtract by ASCII, 'a'...'h' → 0...7
+    let rank = chars.next().unwrap() as u8 - b'1';
+    Some((rank as usize, file as usize))
+}
+
+fn coordinate_to_square((x, y): (usize, usize)) -> String {
+    format!("{}{}", (b'a' + x as u8) as char, y - 1)
 }
