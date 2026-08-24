@@ -77,33 +77,17 @@ impl Board {
 
         let _castling = fen_component.next().unwrap();
         let en_passant_str = fen_component.next().unwrap();
-        let mut file: i32 = -1;
-        let mut rank: i32 = -1;
 
-        if en_passant_str != "-" {
-            let en_passant_file_string = en_passant_str.chars().next().unwrap().to_string();
-            let en_passant_file = en_passant_file_string.as_str();
-            let en_passant_rank = en_passant_str.chars().next().unwrap().to_digit(10).unwrap() as i32;
-            file = match &en_passant_file {
-                &"a" => 0,
-                &"b" => 1,
-                &"c" => 2,
-                &"d" => 3,
-                &"e" => 4,
-                &"f" => 5,
-                &"g" => 6,
-                &"h" => 7,
-                _ => panic!("Unknown file!")
-            };
-            rank = en_passant_rank + 1;
-        }
-
-        let en_passant: Option<(usize, usize)>;
-        if file != -1 && rank != -1 {
-            en_passant = Some((rank as usize, file as usize));
-        } else {
-            en_passant = None;
-        }
+        // Translate en_passant to board coordinate
+        let en_passant = match en_passant_str {
+            "_" => None,
+            _ => {
+                let mut chars = en_passant_str.chars();
+                let file = chars.next().unwrap() as u8 - b'a'; // subtract by ASCII, 'a'...'h' → 0...7
+                let rank = chars.next().unwrap() as u8 - b'1';
+                Some((rank as usize, file as usize))
+            }
+        };
 
         Board { board_state, turn, en_passant }
     }
