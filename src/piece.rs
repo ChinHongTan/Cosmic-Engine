@@ -127,4 +127,15 @@ impl Piece {
     pub fn new(kind: Kind, color: Color) -> Piece {
         Piece { kind, color }
     }
+
+    pub fn symbol(self) -> char {
+        match self.color {
+            Black => {
+                self.kind.symbol().to_ascii_lowercase()
+            }
+            White => {
+                self.kind.symbol()
+            }
+        }
+    }
 }

@@ -13,17 +13,18 @@ pub struct Board {
 
 impl fmt::Display for Board {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        for row in &self.board_state {
-            for cell in row {
-                let symbol = match cell {
-                    Some(piece) => piece.kind.symbol(),
+        for rank in (0..8).rev() {
+            write!(f, "{} ", rank + 1)?;
+            for file in 0..8 {
+                let symbol = match self.board_state[rank][file] {
+                    Some(piece) => piece.symbol(),
                     None => '.',
                 };
-                write!(f, "{}", symbol)?;
+                write!(f, "{} ", symbol)?;
             }
             writeln!(f)?;
         }
-        Ok(())
+        writeln!(f, "  a b c d e f g h")
     }
 }
 
