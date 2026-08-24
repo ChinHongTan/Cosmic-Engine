@@ -80,7 +80,7 @@ impl Board {
 
         // Translate en_passant to board coordinate
         let en_passant = match en_passant_str {
-            "_" => None,
+            "-" => None,
             _ => {
                 square_to_coordinate(en_passant_str)
             }
@@ -153,14 +153,6 @@ impl Board {
             }
         }
 
-        println!("{:?}", self.en_passant);
-
-        if let Some(p) = self.en_passant {
-            println!("En passant!");
-            println!("{} {}", p.0, p.1);
-            possible_moves.push((p.0, p.1))
-        }
-
         // Front
         // if not blocked
         let None = self.board_state[new_y][start_x] else {
@@ -201,7 +193,9 @@ impl Board {
             _ => self.piece_moves(piece, starting_pos),
         };
 
-        println!("{:?}", possible_moves);
+        for m in &possible_moves {
+            println!("{}", coordinate_to_square(m));
+        }
 
         if possible_moves.contains(&target_pos) {
             if self.board_state[target_y][target_x] != None {
@@ -233,9 +227,9 @@ fn square_to_coordinate(s: &str) -> Option<(usize, usize)> {
     let mut chars = s.chars();
     let file = chars.next().unwrap() as u8 - b'a'; // subtract by ASCII, 'a'...'h' → 0...7
     let rank = chars.next().unwrap() as u8 - b'1';
-    Some((rank as usize, file as usize))
+    Some((file as usize, rank as usize))
 }
 
-fn coordinate_to_square((x, y): (usize, usize)) -> String {
-    format!("{}{}", (b'a' + x as u8) as char, y - 1)
+fn coordinate_to_square((x, y): &(usize, usize)) -> String {
+    format!("{}{}", (b'a' + *x as u8) as char, y + 1)
 }
