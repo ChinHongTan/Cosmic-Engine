@@ -144,7 +144,11 @@ impl Board {
 
             let new_x = (start_x as i32 + dx) as usize;
 
-            if let Some(p) = self.board_state[new_y][new_x] && p.color != piece.color {
+            if let Some(p) = self.board_state[new_y][new_x] {
+                if p.color != piece.color {
+                    possible_moves.push((new_x, new_y));
+                }
+            } else if self.en_passant == Some((new_x, new_y)) {
                 possible_moves.push((new_x, new_y));
             }
         }
