@@ -3,8 +3,10 @@ use std::fmt::Formatter;
 use crate::piece::{Color, Kind, Piece};
 use crate::piece::Color::{Black, White};
 use crate::piece::Kind::{Rook, Knight, Bishop, Queen, King, Pawn};
+use crate::piece_move::PieceMove;
+use crate::square::{square_to_coordinate, coordinate_to_square};
 
-#[derive(Debug)]
+#[derive(Copy, Clone, Debug)]
 pub struct Board {
     board_state: [[Option<Piece>; 8]; 8],
     turn: Color,
@@ -176,11 +178,40 @@ impl Board {
         possible_moves
     }
 
+    fn pseudo_legal_moves(&self, from: (usize, usize)) -> Vec<PieceMove> {
+        let (start_x, start_y) = from;
+
+        let piece = self.board_state[start_y][start_x].unwrap();
+
+        let possible_moves = match piece.kind {
+            Pawn => self.pawn_moves(piece, from),
+            _ => self.piece_moves(piece, from),
+        };
+
+        for m in &possible_moves {
+            println!("{}", coordinate_to_square(m));
+        }
+
+        possible_moves.into_iter().map(|m| {
+            PieceMove { from, to: m, piece }
+        }).collect()
+    }
+
+    // filters out all the legal moves
+    fn legal_moves(&mut self, from: (usize, usize)) -> Vec<PieceMove> {
+        let pseudo = self.pseudo_legal_moves(from);
+        pseudo.into_iter().filter(|m| {
+            let mut cloned_board = self.clone();
+            cloned_board.apply_move(*m);
+            !cloned_board.is_in_check(self.turn)
+        }).collect()
+    }
+
     pub fn make_move(&mut self, starting_pos: (usize, usize), target_pos: (usize, usize)) {
         let (start_x, start_y) = starting_pos;
-        let (target_x, target_y) = target_pos;
 
         let Some(piece) = self.board_state[start_y][start_x] else {
+            println!("Invalid starting position!");
             return
         };
 
@@ -189,48 +220,82 @@ impl Board {
             return
         }
 
-        let possible_moves = match piece.kind {
-            Pawn => self.pawn_moves(piece, starting_pos ),
-            _ => self.piece_moves(piece, starting_pos),
-        };
+        let target_move = PieceMove { from: starting_pos, to: target_pos, piece };
+        let legal = self.legal_moves(starting_pos);
 
-        for m in &possible_moves {
-            println!("{}", coordinate_to_square(m));
-        }
-
-        if possible_moves.contains(&target_pos) {
-            if self.board_state[target_y][target_x] != None {
-                // Capture logic, maybe push them into an array in the future?
-                let _captured_piece = self.board_state[target_y][target_x].take().unwrap();
-            }
-            if piece.kind == Pawn && Some(target_pos) == self.en_passant {
-                self.board_state[start_y][target_x] = None;
-            }
-            if piece.kind == Pawn && (target_y as i32 - start_y as i32).abs() == 2 {
-                self.en_passant = Some((start_x, (start_y + target_y) / 2));
-            } else {
-                self.en_passant = None; // clear en_passant
-            }
-            self.board_state[start_y][start_x] = None; // Take the piece
-            self.board_state[target_y][target_x] = Some(piece); // And place it
-            self.turn = !self.turn;
+        if legal.contains(&target_move) {
+            self.apply_move(target_move)
         } else {
             println!("Invalid move!");
+        }
+    }
+
+    fn apply_move(&mut self, piece_move: PieceMove) {
+        let (start_x, start_y) = piece_move.from;
+        let (target_x, target_y) = piece_move.to;
+        if self.board_state[target_y][target_x] != None {
+            // Capture logic, maybe push them into an array in the future?
+            let _captured_piece = self.board_state[target_y][target_x].take().unwrap();
+        }
+        if piece_move.piece.kind == Pawn && Some((target_x, target_y)) == self.en_passant {
+            self.board_state[start_y][target_x] = None;
+        }
+        if piece_move.piece.kind == Pawn && (target_y as i32 - start_y as i32).abs() == 2 {
+            self.en_passant = Some((start_x, (start_y + target_y) / 2));
+        } else {
+            self.en_passant = None; // clear en_passant
+        }
+
+        self.board_state[start_y][start_x] = None; // Take the piece
+        self.board_state[target_y][target_x] = Some(piece_move.piece); // And place it
+    }
+
+    fn find_king(&self, color: Color) -> Option<(usize, usize)> {
+        for rank in 0..8 {
+            for file in 0..8 {
+                let Some(piece) = self.board_state[rank][file] else {
+                    break
+                };
+                if piece.kind != King && piece.color == color {
+                    break
+                } else {
+                    return Some((file, rank))
+                }
+            }
+        }
+        None
+    }
+
+    // Check if coordinate is being attacked.
+    pub fn is_attacked(&self, coordinate: (usize, usize), color: Color) -> bool {
+        // scan every cell for opposite pieces
+        for rank in 0..8 {
+            for file in 0..8 {
+                let Some(piece) = self.board_state[rank][file] else {
+                    break
+                };
+                if piece.color != color {
+                    let possible_moves = match piece.kind {
+                        Pawn => self.pawn_moves(piece, (file, rank)),
+                        _ => self.piece_moves(piece, (file, rank)),
+                    };
+                    if possible_moves.contains(&coordinate) {
+                        return true
+                    }
+                }
+            }
+        }
+        false
+    }
+    
+    fn is_in_check(&self, color: Color) -> bool {
+        match self.find_king(color) {
+            None => false,
+            Some(k) => self.is_attacked(k, !color),
         }
     }
 
     pub fn print_board(&self) {
         println!("Board: \n{}", self);
     }
-}
-
-fn square_to_coordinate(s: &str) -> Option<(usize, usize)> {
-    let mut chars = s.chars();
-    let file = chars.next().unwrap() as u8 - b'a'; // subtract by ASCII, 'a'...'h' → 0...7
-    let rank = chars.next().unwrap() as u8 - b'1';
-    Some((file as usize, rank as usize))
-}
-
-fn coordinate_to_square((x, y): &(usize, usize)) -> String {
-    format!("{}{}", (b'a' + *x as u8) as char, y + 1)
 }
