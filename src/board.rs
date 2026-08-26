@@ -6,7 +6,7 @@ use crate::piece::Kind::{Rook, Knight, Bishop, Queen, King, Pawn};
 use crate::piece_move::PieceMove;
 use crate::square::{square_to_coordinate, coordinate_to_square};
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Clone, Debug)]
 pub struct Board {
     board_state: [[Option<Piece>; 8]; 8],
     turn: Color,
@@ -178,6 +178,27 @@ impl Board {
         possible_moves
     }
 
+    fn pawn_attacks(from: (usize, usize), color: Color) -> Vec<(usize, usize)> {
+        let (x, y) = from;
+        let mut pawn_attacks = Vec::new();
+        let dy = match color {
+            Black => -1,
+            White => 1,
+        };
+        let new_y = y as i32 + dy;
+        if !(0..8).contains(&new_y) {
+            return vec![];
+        };
+
+        for dx in [-1i32, 1] {
+            if !(0..8).contains(&(x as i32 + dx)) {
+                continue
+            }
+            pawn_attacks.push((dx as usize, dy as usize));
+        }
+        pawn_attacks
+    }
+
     fn pseudo_legal_moves(&self, from: (usize, usize)) -> Vec<PieceMove> {
         let (start_x, start_y) = from;
 
@@ -254,10 +275,10 @@ impl Board {
         for rank in 0..8 {
             for file in 0..8 {
                 let Some(piece) = self.board_state[rank][file] else {
-                    break
+                    continue
                 };
-                if piece.kind != King && piece.color == color {
-                    break
+                if piece.kind == King && piece.color == color {
+                    continue
                 } else {
                     return Some((file, rank))
                 }
@@ -272,11 +293,11 @@ impl Board {
         for rank in 0..8 {
             for file in 0..8 {
                 let Some(piece) = self.board_state[rank][file] else {
-                    break
+                    continue
                 };
                 if piece.color != color {
                     let possible_moves = match piece.kind {
-                        Pawn => self.pawn_moves(piece, (file, rank)),
+                        Pawn => Board::pawn_attacks((file, rank), piece.color),
                         _ => self.piece_moves(piece, (file, rank)),
                     };
                     if possible_moves.contains(&coordinate) {
@@ -287,7 +308,7 @@ impl Board {
         }
         false
     }
-    
+
     fn is_in_check(&self, color: Color) -> bool {
         match self.find_king(color) {
             None => false,
