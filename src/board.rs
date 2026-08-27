@@ -4,13 +4,17 @@ use crate::piece::{Color, Kind, Piece};
 use crate::piece::Color::{Black, White};
 use crate::piece::Kind::{Rook, Knight, Bishop, Queen, King, Pawn};
 use crate::piece_move::PieceMove;
+use crate::castling::{check_castling_pos, CastlingRights};
 use crate::square::{square_to_coordinate, coordinate_to_square};
+use crate::castling::{str_to_castling};
+use crate::castling::CastlingSide::{BlackKing, BlackQueen, WhiteKing, WhiteQueen};
 
 #[derive(Clone, Debug)]
 pub struct Board {
     board_state: [[Option<Piece>; 8]; 8],
     turn: Color,
-    en_passant: Option<(usize, usize)>
+    en_passant: Option<(usize, usize)>,
+    castling: CastlingRights
 }
 
 impl fmt::Display for Board {
@@ -43,8 +47,9 @@ impl Board {
             board_state[1][file] = Some(Piece { kind: Pawn, color: White });
             board_state[0][file] = Some(Piece { kind, color: White });
         }
+        let castling = CastlingRights ([true; 4]);
 
-        Board { board_state, turn: White, en_passant: None }
+        Board { board_state, turn: White, en_passant: None, castling }
     }
 
     pub fn _add_piece(&mut self, coordinate_x: usize, coordinate_y: usize, piece: Piece) -> &mut Self {
@@ -78,7 +83,14 @@ impl Board {
             _ => panic!("Unknown turn state.")
         };
 
-        let _castling = fen_component.next().unwrap();
+        let castling_str = fen_component.next().unwrap();
+        let castling = match castling_str {
+            "-" => CastlingRights([false; 4]),
+            _ => {
+                str_to_castling(castling_str)
+            }
+        };
+
         let en_passant_str = fen_component.next().unwrap();
 
         // Translate en_passant to board coordinate
@@ -89,9 +101,10 @@ impl Board {
             }
         };
 
-        Board { board_state, turn, en_passant }
+        Board { board_state, turn, en_passant, castling }
     }
 
+    // Get all possible moves for a piece (excluding pawn moves)
     fn piece_moves(&self, piece: Piece, starting_pos: (usize, usize)) -> Vec<(usize, usize)> {
         let deltas = piece.kind.move_delta();
         let slider = piece.kind.is_slider();
@@ -123,6 +136,7 @@ impl Board {
         possible_moves
     }
 
+    // Get all possible moves for pawns on board
     fn pawn_moves(&self, piece: Piece, starting_pos: (usize, usize)) -> Vec<(usize, usize)> {
         let mut possible_moves: Vec<(usize, usize)> = Vec::new();
         let (start_x, start_y) = starting_pos;
@@ -178,6 +192,7 @@ impl Board {
         possible_moves
     }
 
+    // Indicate squares attacked by pawn
     fn pawn_attacks(from: (usize, usize), color: Color) -> Vec<(usize, usize)> {
         let (x, y) = from;
         let mut pawn_attacks = Vec::new();
@@ -254,17 +269,43 @@ impl Board {
     fn apply_move(&mut self, piece_move: PieceMove) {
         let (start_x, start_y) = piece_move.from;
         let (target_x, target_y) = piece_move.to;
+        let castling_pos = check_castling_pos(&piece_move.from);
         if self.board_state[target_y][target_x] != None {
             // Capture logic, maybe push them into an array in the future?
-            let _captured_piece = self.board_state[target_y][target_x].take().unwrap();
+            let captured_piece = self.board_state[target_y][target_x].take().unwrap();
+            // If a rook is captured, revoke castling rights
+            if captured_piece.kind == Rook && castling_pos.is_some() {
+                self.castling[castling_pos.clone().unwrap()] = false;
+            }
         }
+
         if piece_move.piece.kind == Pawn && Some((target_x, target_y)) == self.en_passant {
-            self.board_state[start_y][target_x] = None;
+            self.board_state[start_y][target_x] = None; // En passant capture
         }
         if piece_move.piece.kind == Pawn && (target_y as i32 - start_y as i32).abs() == 2 {
             self.en_passant = Some((start_x, (start_y + target_y) / 2));
         } else {
             self.en_passant = None; // clear en_passant
+        }
+
+        // Castling logic
+        // If king is moved
+        if piece_move.piece.kind == King {
+            match self.turn {
+                Black => {
+                    self.castling[BlackKing] = false;
+                    self.castling[BlackQueen] = false;
+                }
+                White => {
+                    self.castling[WhiteKing] = false;
+                    self.castling[WhiteQueen] = false;
+                }
+            }
+        }
+
+        // If rook is moved
+        if piece_move.piece.kind == Rook && castling_pos.is_some() {
+            self.castling[check_castling_pos(&piece_move.from).unwrap()] = false;
         }
 
         self.board_state[start_y][start_x] = None; // Take the piece

@@ -3,6 +3,7 @@ use crate::board::Board;
 mod board;
 mod piece;
 mod square;
+mod castling;
 pub mod piece_move;
 
 fn main() {
