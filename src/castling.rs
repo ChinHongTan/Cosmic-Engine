@@ -1,4 +1,6 @@
 use std::ops::{Index, IndexMut};
+use crate::piece::Color;
+use crate::piece::Color::{Black, White};
 
 #[derive(Clone)]
 pub enum CastlingSide {
@@ -25,9 +27,19 @@ impl IndexMut<CastlingSide> for CastlingRights {
     }
 }
 
+impl CastlingSide {
+    pub(crate) fn color(&self) -> Color {
+        match self {
+            CastlingSide::WhiteKing | CastlingSide::WhiteQueen => White,
+            CastlingSide::BlackKing | CastlingSide::BlackQueen => Black,
+        }
+    }
+}
+
 // Turns FEN string to castling rights
 pub fn str_to_castling(s: &str) -> CastlingRights {
     let mut castling = CastlingRights ([false; 4]);
+    if s == "-" { return castling }
     for c in s.chars() {
         match c {
             'K' => castling[CastlingSide::WhiteKing] = true,
@@ -40,7 +52,7 @@ pub fn str_to_castling(s: &str) -> CastlingRights {
     castling
 }
 
-// See if a position matches the four corners. If yes, revoke castling rights
+// See if a position matches the four corners.
 pub fn check_castling_pos(pos: &(usize, usize)) -> Option<CastlingSide> {
     match pos {
         (0, 0) => Some(CastlingSide::WhiteQueen),

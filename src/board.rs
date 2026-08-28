@@ -4,7 +4,7 @@ use crate::piece::{Color, Kind, Piece};
 use crate::piece::Color::{Black, White};
 use crate::piece::Kind::{Rook, Knight, Bishop, Queen, King, Pawn};
 use crate::piece_move::PieceMove;
-use crate::castling::{check_castling_pos, CastlingRights};
+use crate::castling::{check_castling_pos, CastlingRights, CastlingSide};
 use crate::square::{square_to_coordinate, coordinate_to_square};
 use crate::castling::{str_to_castling};
 use crate::castling::CastlingSide::{BlackKing, BlackQueen, WhiteKing, WhiteQueen};
@@ -209,7 +209,7 @@ impl Board {
             if !(0..8).contains(&(x as i32 + dx)) {
                 continue
             }
-            pawn_attacks.push((dx as usize, dy as usize));
+            pawn_attacks.push(((x as i32 + dx) as usize, new_y as usize));
         }
         pawn_attacks
     }
@@ -301,6 +301,13 @@ impl Board {
                     self.castling[WhiteQueen] = false;
                 }
             }
+
+            // King castling
+            if (target_x as i32 - start_x as i32).abs() == 2 {
+                let (rook_from_x, rook_to_x) = if target_x == 6 { (7, 5) } else { (0, 3) };
+                // Move rook into castling position
+                self.board_state[start_y][rook_to_x] = self.board_state[start_y][rook_from_x].take();
+            }
         }
 
         // If rook is moved
@@ -319,9 +326,9 @@ impl Board {
                     continue
                 };
                 if piece.kind == King && piece.color == color {
-                    continue
-                } else {
                     return Some((file, rank))
+                } else {
+                    continue
                 }
             }
         }
@@ -329,14 +336,14 @@ impl Board {
     }
 
     // Check if coordinate is being attacked.
-    pub fn is_attacked(&self, coordinate: (usize, usize), color: Color) -> bool {
+    pub fn is_attacked(&self, coordinate: (usize, usize), by: Color) -> bool {
         // scan every cell for opposite pieces
         for rank in 0..8 {
             for file in 0..8 {
                 let Some(piece) = self.board_state[rank][file] else {
                     continue
                 };
-                if piece.color != color {
+                if piece.color == by {
                     let possible_moves = match piece.kind {
                         Pawn => Board::pawn_attacks((file, rank), piece.color),
                         _ => self.piece_moves(piece, (file, rank)),
@@ -355,6 +362,55 @@ impl Board {
             None => false,
             Some(k) => self.is_attacked(k, !color),
         }
+    }
+
+    // (side, king_from_x, king_to_x, rook_from_x, must_be_empty, must_be_safe)
+    const CASTLES: [(CastlingSide, usize, usize, usize, &[usize], &[usize]); 4] = [
+        (WhiteKing,  4, 6, 7, &[5, 6],    &[5, 6]),
+        (WhiteQueen, 4, 2, 0, &[1, 2, 3], &[2, 3]),
+        (BlackKing,  4, 6, 7, &[5, 6],    &[5, 6]),
+        (BlackQueen, 4, 2, 0, &[1, 2, 3], &[2, 3]),
+    ];
+
+    fn castle_moves(&self, color: Color) -> Vec<(usize, usize)> {
+        let rank = match color { White => 0, Black => 7 };
+        let mut out = Vec::new();
+
+        for (side, _kx, king_to, _rook_from, empty, safe) in Self::CASTLES {
+            if side.color() != color { continue } // color doesn't match
+            if !self.castling[side] { continue } // castling rights revoked
+            if empty.iter().any(|&f| self.board_state[rank][f].is_some()) { continue } // If any cell in between is empty
+            if self.is_attacked((4, rank), !color) { continue } // currently in check
+            if safe.iter().any(|&f| self.is_attacked((f, rank), !color)) { continue } // If any cell is being attacked
+            out.push((king_to, rank));
+        }
+        out
+    }
+
+    fn perft(&mut self, depth: u32) -> u64 {
+        if depth == 0 { return 1; }
+        let mut nodes = 0;
+        for from in self.all_squares_with_own_pieces() {
+            for m in self.legal_moves(from) {
+                let mut next = self.clone();
+                next.apply_move(m);
+                next.turn = !next.turn;
+                nodes += next.perft(depth - 1)
+            }
+        }
+        nodes
+    }
+
+    fn all_squares_with_own_pieces(&self) -> Vec<(usize, usize)> {
+        let mut output = Vec::new();
+        for rank in 0..8 {
+            for file in 0..8 {
+                if self.board_state[rank][file].is_some() {
+                    output.push((file, rank))
+                }
+            }
+        }
+        output
     }
 
     pub fn print_board(&self) {
