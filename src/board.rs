@@ -112,26 +112,37 @@ impl Board {
         let mut possible_moves: Vec<(usize, usize)> = Vec::new();
 
         for (dx, dy) in deltas {
+            // println!("Checking {dx} {dy} direction.");
             let mut new_x = start_x as i32 + dx;
             let mut new_y = start_y as i32 + dy;
             while (0..8).contains(&new_x) && (0..8).contains(&new_y) {
                 // If blocked by something
+                // println!("Checking square {new_x}, {new_y}");
+                // println!("{:?}", self.board_state[new_y as usize][new_x as usize]);
                 if let Some(target_piece) = self.board_state[new_y as usize][new_x as usize] {
                     if target_piece.color == piece.color {
+                        // println!("Blocked by same color piece");
                         break
                     } else {
+                        // println!("Able to capture, stopping this direction check");
                         possible_moves.push((new_x as usize, new_y as usize));
                         break
                     }
                 }
+                // println!("There's nothing blocking.");
                 possible_moves.push((new_x as usize, new_y as usize));
                 // if not slider, stop checking
                 if slider == false {
+                    // println!("Not slider, stopping.");
                     break
                 }
                 new_x = new_x + dx;
                 new_y = new_y + dy;
             }
+        }
+        // Add case for king castling
+        if piece.kind == King {
+            possible_moves.append(&mut self.castle_moves(piece.color));
         }
         possible_moves
     }
@@ -214,6 +225,26 @@ impl Board {
         pawn_attacks
     }
 
+    fn king_attacks(from: (usize, usize)) -> Vec<(usize, usize)> {
+        let (x, y) = from;
+        let mut king_attacks = Vec::new();
+        for dx in [-1i32, 0, 1] {
+            for dy in [-1i32, 0, 1] {
+                let new_x = x as i32 + dx;
+                let new_y = y as i32 + dy;
+                if !(0..8).contains(&new_x) || !(0..8).contains(&new_y) {
+                    continue
+                }
+                if new_x == 0 && new_y == 0 {
+                    continue
+                }
+
+                king_attacks.push((new_x as usize, new_y as usize));
+            }
+        }
+        king_attacks
+    }
+
     fn pseudo_legal_moves(&self, from: (usize, usize)) -> Vec<PieceMove> {
         let (start_x, start_y) = from;
 
@@ -252,7 +283,7 @@ impl Board {
         };
 
         if piece.color != self.turn {
-            println!("Invalid move!");
+            println!("Invalid move - Not your turn!");
             return
         }
 
@@ -260,7 +291,8 @@ impl Board {
         let legal = self.legal_moves(starting_pos);
 
         if legal.contains(&target_move) {
-            self.apply_move(target_move)
+            self.apply_move(target_move);
+            self.turn = !self.turn;
         } else {
             println!("Invalid move!");
         }
@@ -346,6 +378,7 @@ impl Board {
                 if piece.color == by {
                     let possible_moves = match piece.kind {
                         Pawn => Board::pawn_attacks((file, rank), piece.color),
+                        King => Board::king_attacks((file, rank)),
                         _ => self.piece_moves(piece, (file, rank)),
                     };
                     if possible_moves.contains(&coordinate) {
@@ -387,10 +420,10 @@ impl Board {
         out
     }
 
-    fn perft(&mut self, depth: u32) -> u64 {
+    pub fn perft(&mut self, depth: u32) -> u64 {
         if depth == 0 { return 1; }
         let mut nodes = 0;
-        for from in self.all_squares_with_own_pieces() {
+        for from in self.all_squares_with_own_pieces(White) {
             for m in self.legal_moves(from) {
                 let mut next = self.clone();
                 next.apply_move(m);
@@ -401,12 +434,15 @@ impl Board {
         nodes
     }
 
-    fn all_squares_with_own_pieces(&self) -> Vec<(usize, usize)> {
+    fn all_squares_with_own_pieces(&self, color: Color) -> Vec<(usize, usize)> {
         let mut output = Vec::new();
         for rank in 0..8 {
             for file in 0..8 {
-                if self.board_state[rank][file].is_some() {
-                    output.push((file, rank))
+                let Some(piece) = self.board_state[rank][file] else {
+                    continue
+                };
+                if piece.color == color {
+                    output.push((file, rank));
                 }
             }
         }

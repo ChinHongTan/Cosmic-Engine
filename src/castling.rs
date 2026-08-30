@@ -1,4 +1,5 @@
 use std::ops::{Index, IndexMut};
+use crate::castling::CastlingSide::{BlackKing, BlackQueen, WhiteKing, WhiteQueen};
 use crate::piece::Color;
 use crate::piece::Color::{Black, White};
 
@@ -30,8 +31,8 @@ impl IndexMut<CastlingSide> for CastlingRights {
 impl CastlingSide {
     pub(crate) fn color(&self) -> Color {
         match self {
-            CastlingSide::WhiteKing | CastlingSide::WhiteQueen => White,
-            CastlingSide::BlackKing | CastlingSide::BlackQueen => Black,
+            WhiteKing | WhiteQueen => White,
+            BlackKing | BlackQueen => Black,
         }
     }
 }
@@ -42,10 +43,10 @@ pub fn str_to_castling(s: &str) -> CastlingRights {
     if s == "-" { return castling }
     for c in s.chars() {
         match c {
-            'K' => castling[CastlingSide::WhiteKing] = true,
-            'Q' => castling[CastlingSide::WhiteQueen] = true,
-            'k' => castling[CastlingSide::BlackKing] = true,
-            'q' => castling[CastlingSide::BlackQueen] = true,
+            'K' => castling[WhiteKing] = true,
+            'Q' => castling[WhiteQueen] = true,
+            'k' => castling[BlackKing] = true,
+            'q' => castling[BlackQueen] = true,
             _ => panic!("Invalid castling string"),
         }
     }
@@ -55,10 +56,10 @@ pub fn str_to_castling(s: &str) -> CastlingRights {
 // See if a position matches the four corners.
 pub fn check_castling_pos(pos: &(usize, usize)) -> Option<CastlingSide> {
     match pos {
-        (0, 0) => Some(CastlingSide::WhiteQueen),
-        (7, 0) => Some(CastlingSide::WhiteKing),
-        (0, 7) => Some(CastlingSide::BlackQueen),
-        (7, 7) => Some(CastlingSide::BlackKing),
+        (0, 0) => Some(WhiteQueen),
+        (7, 0) => Some(WhiteKing),
+        (0, 7) => Some(BlackQueen),
+        (7, 7) => Some(BlackKing),
         _ => None
     }
 }

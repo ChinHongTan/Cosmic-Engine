@@ -8,6 +8,8 @@ pub mod piece_move;
 
 fn main() {
     let mut board = Board::new(); // Init board
+    println!("Check board perft");
+    println!("{}", board.perft(2));
     println!("Check white pawn 1 step");
     board.print_board();
     board.make_move((1, 1), (1, 2)); // Check white pawn 1 step
@@ -43,6 +45,18 @@ fn main() {
     board.print_board();
 
     println!("Check FEN parser.");
-    let board_fen = Board::from_fen("8/8/8/8/8/8/8/N7 w - - 0 1");
-    board_fen.print_board()
+    let mut board_fen = Board::from_fen("8/8/8/8/8/8/8/N7 w - - 0 1");
+    board_fen.print_board();
+
+    println!("Check white castling.");
+    board_fen = Board::from_fen("r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1");
+    board_fen.print_board();
+    board_fen.make_move((4, 0), (6, 0));
+    board_fen.print_board();
+    println!("Expect invalid castling since white rook is in the way");
+    board_fen.make_move((4, 7), (6, 7));
+    board_fen.print_board();
+    println!("Check black queen side castling");
+    board_fen.make_move((4, 7), (2, 7));
+    board_fen.print_board();
 }
