@@ -14,7 +14,9 @@ pub struct Board {
     board_state: [[Option<Piece>; 8]; 8],
     turn: Color,
     en_passant: Option<(usize, usize)>,
-    castling: CastlingRights
+    castling: CastlingRights,
+    halfmove: u32,
+    fullmove: u32,
 }
 
 impl fmt::Display for Board {
@@ -41,6 +43,9 @@ pub enum GameState {
     Ongoing,
     Checkmate { winner: Color },   // side to move has lost
     Stalemate,   // draw
+    DrawByFiftyMove,
+    DrawByInsufficientMaterial,
+    DrawByRepetition,
 }
 
 impl Board {
@@ -55,13 +60,20 @@ impl Board {
         }
         let castling = CastlingRights ([true; 4]);
 
-        Board { board_state, turn: White, en_passant: None, castling }
+        Board { board_state, turn: White, en_passant: None, castling, halfmove: 0, fullmove: 0 }
     }
 
     pub fn game_state(&mut self) -> GameState {
+        if self.halfmove >= 100 {
+            return GameState::DrawByFiftyMove;
+        }
+        if self.insufficient_material() {
+            return GameState::DrawByInsufficientMaterial;
+        }
         if self.has_legal_moves() {
             return GameState::Ongoing;
         }
+
         if self.is_in_check(self.turn) {
             GameState::Checkmate { winner: !self.turn }
         } else {
@@ -113,7 +125,11 @@ impl Board {
             }
         };
 
-        Board { board_state, turn, en_passant, castling }
+        let halfmove = fen_component.next().unwrap().parse::<u32>().unwrap();
+
+        let fullmove = fen_component.next().unwrap().parse::<u32>().unwrap();
+
+        Board { board_state, turn, en_passant, castling, halfmove, fullmove }
     }
 
     // Get all possible moves for a piece (excluding pawn moves)
@@ -307,14 +323,17 @@ impl Board {
             self.turn = !self.turn;
             match self.game_state() {
                 GameState::Checkmate { winner } => println!("Checkmate, winning side: {}", winner),
-                GameState::Stalemate => println!("Draw"),
+                GameState::Stalemate => println!("Draw by stalemate"),
                 GameState::Ongoing => {}
+                GameState::DrawByInsufficientMaterial => println!("Draw by insufficient material."),
+                GameState::DrawByFiftyMove => println!("Draw by fifty move rule."),
+                GameState::DrawByRepetition => println!("Draw by repetition.")
             }
         } else {
             println!("Invalid move!");
         }
 
-        
+
     }
 
     fn apply_move(&mut self, piece_move: PieceMove) {
@@ -366,7 +385,16 @@ impl Board {
             self.castling[check_castling_pos(&piece_move.from).unwrap()] = false;
         }
 
-        self.board_state[start_y][start_x] = None; // Take the piece
+        let captured = self.board_state[start_y][start_x].take(); // Take the piece
+
+        if piece_move.piece.kind == Pawn || captured.is_some() {
+            self.halfmove = 0;
+        } else {
+            self.halfmove += 1;
+        }
+        if piece_move.piece.color == Black {
+            self.fullmove += 1;
+        }
 
         let after_promote = match piece_move.promotion { // Account for promotion
             None => piece_move.piece,
@@ -496,6 +524,35 @@ impl Board {
             }
         }
         output
+    }
+
+    // A square is dark if (file + rank) is even, light if odd.
+    fn square_color(pos: (usize, usize)) -> bool {
+        (pos.0 + pos.1) % 2 == 0
+    }
+
+    fn insufficient_material(&self) -> bool {
+        let mut minors = Vec::new();
+
+        for rank in 0..8 {
+            for file in 0..8 {
+                let Some(piece) = self.board_state[rank][file] else { continue };
+                match piece.kind {
+                    King => {}
+                    Bishop | Knight => minors.push((piece.kind, (file, rank))),
+                    _ => return false
+                }
+            }
+        }
+
+        match minors.len() {
+            0 | 1 => true, // K vs K, K&B vs K, K&N vs K
+            2 => {  // 2 bishops of the same color
+                let [(k1, p1), (k2, p2)] = minors[..] else { return false };
+                k1 == Bishop && k2 == Bishop && Self::square_color(p1) == Self::square_color(p2)
+            }
+            _ => false
+        }
     }
 
     pub fn print_board(&self) {
