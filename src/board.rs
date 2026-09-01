@@ -52,11 +52,6 @@ impl Board {
         Board { board_state, turn: White, en_passant: None, castling }
     }
 
-    pub fn _add_piece(&mut self, coordinate_x: usize, coordinate_y: usize, piece: Piece) -> &mut Self {
-        self.board_state[coordinate_y][coordinate_x] = Some(piece);
-        self
-    }
-
     // "8/8/8/8/8/8/8/N7 w - - 0 1"
     pub fn from_fen(fen: &str) -> Board {
         let mut board_state = [[None; 8]; 8];
@@ -112,28 +107,21 @@ impl Board {
         let mut possible_moves: Vec<(usize, usize)> = Vec::new();
 
         for (dx, dy) in deltas {
-            // println!("Checking {dx} {dy} direction.");
             let mut new_x = start_x as i32 + dx;
             let mut new_y = start_y as i32 + dy;
             while (0..8).contains(&new_x) && (0..8).contains(&new_y) {
                 // If blocked by something
-                // println!("Checking square {new_x}, {new_y}");
-                // println!("{:?}", self.board_state[new_y as usize][new_x as usize]);
                 if let Some(target_piece) = self.board_state[new_y as usize][new_x as usize] {
                     if target_piece.color == piece.color {
-                        // println!("Blocked by same color piece");
                         break
                     } else {
-                        // println!("Able to capture, stopping this direction check");
                         possible_moves.push((new_x as usize, new_y as usize));
                         break
                     }
                 }
-                // println!("There's nothing blocking.");
                 possible_moves.push((new_x as usize, new_y as usize));
                 // if not slider, stop checking
                 if slider == false {
-                    // println!("Not slider, stopping.");
                     break
                 }
                 new_x = new_x + dx;
@@ -166,8 +154,8 @@ impl Board {
         for dx in [-1i32, 1] {
             // Not in range of the board
             if !(0..8).contains(&(dx + start_x as i32)) || !(0..8).contains(&(dy + start_y as i32)) {
-                println!("Not in range!");
-                break
+                // println!("Not in range!");
+                continue
             }
 
             let new_x = (start_x as i32 + dx) as usize;
@@ -235,9 +223,6 @@ impl Board {
                 if !(0..8).contains(&new_x) || !(0..8).contains(&new_y) {
                     continue
                 }
-                if new_x == 0 && new_y == 0 {
-                    continue
-                }
 
                 king_attacks.push((new_x as usize, new_y as usize));
             }
@@ -255,13 +240,23 @@ impl Board {
             _ => self.piece_moves(piece, from),
         };
 
-        for m in &possible_moves {
-            println!("{}", coordinate_to_square(m));
-        }
+        let promo_rank = match piece.color {
+            White => 7,
+            Black => 0,
+        };
 
-        possible_moves.into_iter().map(|m| {
-            PieceMove { from, to: m, piece }
-        }).collect()
+        let mut out = Vec::new();
+
+        for m in possible_moves {
+            if piece.kind == Pawn && m.1 == promo_rank {
+                for k in [Queen, Rook, Bishop, Knight] {
+                    out.push(PieceMove {from, to: m, piece, promotion: Some(k) });
+                }
+            } else {
+                out.push(PieceMove { from, to: m, piece, promotion: None });
+            }
+        }
+        out
     }
 
     // filters out all the legal moves
@@ -274,7 +269,7 @@ impl Board {
         }).collect()
     }
 
-    pub fn make_move(&mut self, starting_pos: (usize, usize), target_pos: (usize, usize)) {
+    pub fn make_move(&mut self, starting_pos: (usize, usize), target_pos: (usize, usize), promote_to: Option<Kind>) {
         let (start_x, start_y) = starting_pos;
 
         let Some(piece) = self.board_state[start_y][start_x] else {
@@ -287,7 +282,7 @@ impl Board {
             return
         }
 
-        let target_move = PieceMove { from: starting_pos, to: target_pos, piece };
+        let target_move = PieceMove { from: starting_pos, to: target_pos, piece, promotion: promote_to };
         let legal = self.legal_moves(starting_pos);
 
         if legal.contains(&target_move) {
@@ -323,7 +318,7 @@ impl Board {
         // Castling logic
         // If king is moved
         if piece_move.piece.kind == King {
-            match self.turn {
+            match piece_move.piece.color {
                 Black => {
                     self.castling[BlackKing] = false;
                     self.castling[BlackQueen] = false;
@@ -348,7 +343,13 @@ impl Board {
         }
 
         self.board_state[start_y][start_x] = None; // Take the piece
-        self.board_state[target_y][target_x] = Some(piece_move.piece); // And place it
+
+        let after_promote = match piece_move.promotion { // Account for promotion
+            None => piece_move.piece,
+            Some(kind) => Piece { kind, color: piece_move.piece.color }
+        };
+
+        self.board_state[target_y][target_x] = Some(after_promote); // And place it
     }
 
     fn find_king(&self, color: Color) -> Option<(usize, usize)> {
@@ -423,7 +424,7 @@ impl Board {
     pub fn perft(&mut self, depth: u32) -> u64 {
         if depth == 0 { return 1; }
         let mut nodes = 0;
-        for from in self.all_squares_with_own_pieces(White) {
+        for from in self.all_squares_with_own_pieces(self.turn) {
             for m in self.legal_moves(from) {
                 let mut next = self.clone();
                 next.apply_move(m);
@@ -432,6 +433,21 @@ impl Board {
             }
         }
         nodes
+    }
+
+    pub fn perft_divide(&mut self, depth: u32) {
+        let mut total = 0;
+        for from in self.all_squares_with_own_pieces(self.turn) {
+            for m in self.legal_moves(from) {
+                let mut next = self.clone();
+                next.apply_move(m);
+                next.turn = !next.turn;
+                let n = next.perft(depth - 1);
+                println!("{}{}: {}", coordinate_to_square(&m.from), coordinate_to_square(&m.to), n);
+                total += n;
+            }
+        }
+        println!("total: {}", total);
     }
 
     fn all_squares_with_own_pieces(&self, color: Color) -> Vec<(usize, usize)> {
