@@ -9,7 +9,7 @@ pub mod piece_move;
 fn main() {
     let mut board = Board::new(); // Init board
     println!("Check board perft");
-    println!("{:?}", board.perft_divide(6));
+    println!("{:?}", board.perft_divide(5));
     println!("Check white pawn 1 step");
     board.print_board();
     board.make_move((1, 1), (1, 2), None); // Check white pawn 1 step

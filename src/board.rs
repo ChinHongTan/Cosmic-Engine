@@ -37,6 +37,12 @@ impl fmt::Display for Board {
 // Back rank predefined
 const BACK_RANK: [Kind; 8] = [Rook, Knight, Bishop, Queen, King, Bishop, Knight, Rook];
 
+pub enum GameState {
+    Ongoing,
+    Checkmate { winner: Color },   // side to move has lost
+    Stalemate,   // draw
+}
+
 impl Board {
     pub fn new() -> Board {
         let mut board_state = [[None; 8]; 8];
@@ -50,6 +56,17 @@ impl Board {
         let castling = CastlingRights ([true; 4]);
 
         Board { board_state, turn: White, en_passant: None, castling }
+    }
+
+    pub fn game_state(&mut self) -> GameState {
+        if self.has_legal_moves() {
+            return GameState::Ongoing;
+        }
+        if self.is_in_check(self.turn) {
+            GameState::Checkmate { winner: !self.turn }
+        } else {
+            GameState::Stalemate
+        }
     }
 
     // "8/8/8/8/8/8/8/N7 w - - 0 1"
@@ -288,9 +305,16 @@ impl Board {
         if legal.contains(&target_move) {
             self.apply_move(target_move);
             self.turn = !self.turn;
+            match self.game_state() {
+                GameState::Checkmate { winner } => println!("Checkmate, winning side: {}", winner),
+                GameState::Stalemate => println!("Draw"),
+                GameState::Ongoing => {}
+            }
         } else {
             println!("Invalid move!");
         }
+
+        
     }
 
     fn apply_move(&mut self, piece_move: PieceMove) {
@@ -419,6 +443,15 @@ impl Board {
             out.push((king_to, rank));
         }
         out
+    }
+
+    fn has_legal_moves(&mut self) -> bool {
+        for from in self.all_squares_with_own_pieces(self.turn) {
+            for _m in self.legal_moves(from) {
+                return true
+            }
+        }
+        false
     }
 
     pub fn perft(&mut self, depth: u32) -> u64 {

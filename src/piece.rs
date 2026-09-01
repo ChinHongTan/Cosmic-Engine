@@ -1,5 +1,5 @@
 use std::fmt;
-use std::fmt::Formatter;
+use std::fmt::{Display, Formatter};
 use std::ops::Not;
 use crate::piece::Color::{Black, White};
 use crate::piece::Kind::{Bishop, King, Knight, Pawn, Queen, Rook};
@@ -114,6 +114,16 @@ impl Not for Color {
             Black => White,
             White => Black
         }
+    }
+}
+
+impl Display for Color {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let color = match self {
+            Black => "Black",
+            White => "White",
+        };
+        write!(f, "{}", color)
     }
 }
 
