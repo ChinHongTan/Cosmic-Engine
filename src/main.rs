@@ -5,6 +5,7 @@ mod piece;
 mod square;
 mod castling;
 pub mod piece_move;
+pub mod zobrist;
 
 fn main() {
     let mut board = Board::new(); // Init board

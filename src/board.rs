@@ -1,5 +1,6 @@
 use std::fmt;
 use std::fmt::Formatter;
+use std::sync::LazyLock;
 use crate::piece::{Color, Kind, Piece};
 use crate::piece::Color::{Black, White};
 use crate::piece::Kind::{Rook, Knight, Bishop, Queen, King, Pawn};
@@ -8,6 +9,9 @@ use crate::castling::{check_castling_pos, CastlingRights, CastlingSide};
 use crate::square::{square_to_coordinate, coordinate_to_square};
 use crate::castling::{str_to_castling};
 use crate::castling::CastlingSide::{BlackKing, BlackQueen, WhiteKing, WhiteQueen};
+use crate::zobrist::Zobrist;
+
+pub static ZOBRIST: LazyLock<Zobrist> = LazyLock::new(Zobrist::new);
 
 #[derive(Clone, Debug)]
 pub struct Board {
@@ -17,6 +21,8 @@ pub struct Board {
     castling: CastlingRights,
     halfmove: u32,
     fullmove: u32,
+    hash: u64,
+    history: Vec<u64>
 }
 
 impl fmt::Display for Board {
@@ -36,6 +42,21 @@ impl fmt::Display for Board {
     }
 }
 
+impl Default for Board {
+    fn default() -> Self {
+        Board {
+            board_state: [[None; 8]; 8],
+            turn: White,
+            en_passant: None,
+            castling: CastlingRights([false; 4]),
+            halfmove: 0,
+            fullmove: 1,
+            hash: 0,
+            history: vec![],
+        }
+    }
+}
+
 // Back rank predefined
 const BACK_RANK: [Kind; 8] = [Rook, Knight, Bishop, Queen, King, Bishop, Knight, Rook];
 
@@ -49,6 +70,12 @@ pub enum GameState {
 }
 
 impl Board {
+    fn finalize(mut self) -> Board {
+        self.hash = self.hash();
+        self.history.push(self.hash);
+        self
+    }
+
     pub fn new() -> Board {
         let mut board_state = [[None; 8]; 8];
         for file in 0..8 {
@@ -60,7 +87,36 @@ impl Board {
         }
         let castling = CastlingRights ([true; 4]);
 
-        Board { board_state, turn: White, en_passant: None, castling, halfmove: 0, fullmove: 0 }
+        Board { board_state, castling, ..Default::default() }
+            .finalize()
+    }
+
+    pub fn hash(&self) -> u64 {
+        let mut h = 0u64;
+
+        for rank in 0..8 {
+            for file in 0..8 {
+                if let Some(piece) = self.board_state[rank][file] {
+                    h ^= ZOBRIST.random_table[piece.color as usize][piece.kind as usize][rank * 8 + file];
+                }
+            }
+        }
+
+        if self.turn == Black {
+            h ^= ZOBRIST.black_to_move;
+        }
+
+        for i in 0..4 {
+            if self.castling.0[i] {
+                h ^= ZOBRIST.castling[i];
+            }
+        }
+
+        if let Some((file, _)) = self.en_passant {
+            h ^= ZOBRIST.en_passant_file[file];
+        }
+
+        h
     }
 
     pub fn game_state(&mut self) -> GameState {
@@ -129,7 +185,8 @@ impl Board {
 
         let fullmove = fen_component.next().unwrap().parse::<u32>().unwrap();
 
-        Board { board_state, turn, en_passant, castling, halfmove, fullmove }
+        Board { board_state, turn, en_passant, castling, halfmove, fullmove, ..Default::default() }
+            .finalize()
     }
 
     // Get all possible moves for a piece (excluding pawn moves)
@@ -343,19 +400,27 @@ impl Board {
         if self.board_state[target_y][target_x] != None {
             // Capture logic, maybe push them into an array in the future?
             let captured_piece = self.board_state[target_y][target_x].take().unwrap();
+            let index = start_y * 8 + start_x;
+            self.hash ^= ZOBRIST.random_table[piece_move.piece.color as usize][piece_move.piece.kind as usize][index];
             // If a rook is captured, revoke castling rights
             if captured_piece.kind == Rook && castling_pos.is_some() {
-                self.castling[castling_pos.clone().unwrap()] = false;
+                let c = castling_pos.clone().unwrap();
+                self.castling[c.clone()] = false;
+                self.hash ^= ZOBRIST.castling[c as usize]
             }
         }
 
         if piece_move.piece.kind == Pawn && Some((target_x, target_y)) == self.en_passant {
-            self.board_state[start_y][target_x] = None; // En passant capture
+            let piece = self.board_state[start_y][target_x].take().unwrap(); // En passant capture
+            let index = start_y * 8 + target_x;
+            self.hash ^= ZOBRIST.random_table[piece.color as usize][piece.kind as usize][index];
         }
         if piece_move.piece.kind == Pawn && (target_y as i32 - start_y as i32).abs() == 2 {
             self.en_passant = Some((start_x, (start_y + target_y) / 2));
+            self.hash ^= ZOBRIST.en_passant_file[start_x]
         } else {
             self.en_passant = None; // clear en_passant
+            self.hash ^= ZOBRIST.en_passant_file[self.en_passant.unwrap().0]
         }
 
         // Castling logic
@@ -364,11 +429,15 @@ impl Board {
             match piece_move.piece.color {
                 Black => {
                     self.castling[BlackKing] = false;
+                    self.hash ^= ZOBRIST.castling[BlackKing as usize];
                     self.castling[BlackQueen] = false;
+                    self.hash ^= ZOBRIST.castling[BlackQueen as usize];
                 }
                 White => {
                     self.castling[WhiteKing] = false;
+                    self.hash ^= ZOBRIST.castling[WhiteKing as usize];
                     self.castling[WhiteQueen] = false;
+                    self.hash ^= ZOBRIST.castling[WhiteQueen as usize];
                 }
             }
 
@@ -377,15 +446,26 @@ impl Board {
                 let (rook_from_x, rook_to_x) = if target_x == 6 { (7, 5) } else { (0, 3) };
                 // Move rook into castling position
                 self.board_state[start_y][rook_to_x] = self.board_state[start_y][rook_from_x].take();
+                let from_index = start_y * 8 + rook_from_x;
+                let to_index = start_y * 8 + rook_to_x;
+                self.hash ^= ZOBRIST.random_table[piece_move.piece.color as usize][piece_move.piece.kind as usize][from_index];
+                self.hash ^= ZOBRIST.random_table[piece_move.piece.color as usize][piece_move.piece.kind as usize][to_index];
             }
         }
 
         // If rook is moved
         if piece_move.piece.kind == Rook && castling_pos.is_some() {
             self.castling[check_castling_pos(&piece_move.from).unwrap()] = false;
+            self.hash ^= ZOBRIST.castling[check_castling_pos(&piece_move.from).unwrap() as usize];
         }
 
         let captured = self.board_state[start_y][start_x].take(); // Take the piece
+
+        if captured.is_some() {
+            let index = start_y * 8 + start_x;
+            self.hash ^= ZOBRIST.random_table[captured.unwrap().color as usize][captured.unwrap().kind as usize][index];
+        }
+
 
         if piece_move.piece.kind == Pawn || captured.is_some() {
             self.halfmove = 0;
@@ -402,6 +482,8 @@ impl Board {
         };
 
         self.board_state[target_y][target_x] = Some(after_promote); // And place it
+        let index = target_y * 8 + target_x;
+        self.hash ^= ZOBRIST.random_table[after_promote.color as usize][after_promote.kind as usize][index];
     }
 
     fn find_king(&self, color: Color) -> Option<(usize, usize)> {
