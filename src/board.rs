@@ -25,6 +25,14 @@ pub struct Board {
     history: Vec<u64>
 }
 
+pub struct Unmake {
+    captured: Option<Piece>,
+    castling: CastlingRights,
+    en_passant: Option<(usize, usize)>,
+    halfmove: u32,
+    hash: u64,
+}
+
 impl fmt::Display for Board {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         for rank in (0..8).rev() {
@@ -364,7 +372,7 @@ impl Board {
         let pseudo = self.pseudo_legal_moves(from);
         pseudo.into_iter().filter(|m| {
             let mut cloned_board = self.clone();
-            cloned_board.apply_move(*m);
+            cloned_board.make(*m);
             !cloned_board.is_in_check(m.piece.color)
         }).collect()
     }
@@ -384,7 +392,7 @@ impl Board {
         let legal = self.legal_moves(starting_pos);
 
         if legal.contains(&target_move) {
-            self.apply_move(target_move);
+            self.make(target_move);
             MoveResult::Ok(self.game_state())
         } else {
             MoveResult::Illegal
@@ -393,7 +401,15 @@ impl Board {
 
     }
 
-    fn apply_move(&mut self, piece_move: PieceMove) {
+    fn make(&mut self, piece_move: PieceMove) -> Unmake {
+        let undo = Unmake {
+            captured: self.board_state[piece_move.to.1][piece_move.to.0],
+            castling: self.castling.clone(),
+            en_passant: self.en_passant,
+            halfmove: self.halfmove,
+            hash: self.hash,
+        };
+
         let (start_x, start_y) = piece_move.from;
         let (target_x, target_y) = piece_move.to;
         let castling_pos = check_castling_pos(&piece_move.from);
@@ -464,6 +480,31 @@ impl Board {
         self.board_state[target_y][target_x] = Some(after_promote); // And place it
         self.hash = self.hash();
         self.history.push(self.hash);
+        self.turn = !self.turn;
+
+        undo
+    }
+
+    fn unmake(&mut self, piece_move: PieceMove, undo: Unmake) {
+        // move the piece back and replace captured piece
+        self.board_state[piece_move.from.1][piece_move.from.0] = Some(piece_move.piece);
+        self.board_state[piece_move.to.1][piece_move.to.0] = undo.captured;
+
+        if piece_move.piece.kind == King && (piece_move.to.0 as i32 - piece_move.from.0 as i32).abs() == 2 {
+            let (rook_from_x, rook_to_x) = if piece_move.to.0 == 6 { (7, 5) } else { (0, 3) };
+            // Move rook into castling position
+            self.board_state[piece_move.from.1][rook_from_x] = self.board_state[piece_move.from.1][rook_to_x].take();
+        }
+
+        if piece_move.piece.kind == Pawn && Some((piece_move.to.0, piece_move.to.1)) == self.en_passant {
+            self.board_state[piece_move.from.1][piece_move.to.0] = Some(Piece { kind: Pawn, color: !piece_move.piece.color });
+        }
+
+        self.castling = undo.castling;
+        self.en_passant = undo.en_passant;
+        self.halfmove = undo.halfmove;
+        self.hash = undo.hash;
+        self.history.pop();
         self.turn = !self.turn;
     }
 
@@ -550,9 +591,9 @@ impl Board {
         let mut nodes = 0;
         for from in self.all_squares_with_own_pieces(self.turn) {
             for m in self.legal_moves(from) {
-                let mut next = self.clone();
-                next.apply_move(m);
-                nodes += next.perft(depth - 1)
+                let undo = self.make(m);
+                nodes += self.perft(depth - 1);
+                self.unmake(m, undo);
             }
         }
         nodes
@@ -563,7 +604,7 @@ impl Board {
         for from in self.all_squares_with_own_pieces(self.turn) {
             for m in self.legal_moves(from) {
                 let mut next = self.clone();
-                next.apply_move(m);
+                next.make(m);
                 let n = next.perft(depth - 1);
                 println!("{}{}: {}", coordinate_to_square(&m.from), coordinate_to_square(&m.to), n);
                 total += n;
