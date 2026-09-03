@@ -10,7 +10,10 @@ pub mod zobrist;
 fn main() {
     let mut board = Board::new(); // Init board
     println!("Check board perft");
-    println!("{:?}", board.perft_divide(7));
+    let start = std::time::Instant::now();
+    let nodes = board.perft(5);
+    println!("{} nodes in {:?} ({:.0} nps)",
+             nodes, start.elapsed(), nodes as f64 / start.elapsed().as_secs_f64());
     println!("Check white pawn 1 step");
     board.print_board();
     board.make_move((1, 1), (1, 2), None); // Check white pawn 1 step

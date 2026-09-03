@@ -69,6 +69,13 @@ pub enum GameState {
     DrawByRepetition,
 }
 
+pub enum MoveResult {
+    Ok(GameState),
+    NoPieceThere,
+    NotYourTurn,
+    Illegal,
+}
+
 impl Board {
     fn finalize(mut self) -> Board {
         self.hash = self.hash();
@@ -126,10 +133,13 @@ impl Board {
         if self.insufficient_material() {
             return GameState::DrawByInsufficientMaterial;
         }
+        if self.repetition() {
+            return GameState::DrawByRepetition
+        }
         if self.has_legal_moves() {
             return GameState::Ongoing;
         }
-
+        
         if self.is_in_check(self.turn) {
             GameState::Checkmate { winner: !self.turn }
         } else {
@@ -355,21 +365,19 @@ impl Board {
         pseudo.into_iter().filter(|m| {
             let mut cloned_board = self.clone();
             cloned_board.apply_move(*m);
-            !cloned_board.is_in_check(self.turn)
+            !cloned_board.is_in_check(m.piece.color)
         }).collect()
     }
 
-    pub fn make_move(&mut self, starting_pos: (usize, usize), target_pos: (usize, usize), promote_to: Option<Kind>) {
+    pub fn make_move(&mut self, starting_pos: (usize, usize), target_pos: (usize, usize), promote_to: Option<Kind>) -> MoveResult {
         let (start_x, start_y) = starting_pos;
 
         let Some(piece) = self.board_state[start_y][start_x] else {
-            println!("Invalid starting position!");
-            return
+            return MoveResult::NoPieceThere;
         };
 
         if piece.color != self.turn {
-            println!("Invalid move - Not your turn!");
-            return
+            return MoveResult::NotYourTurn;
         }
 
         let target_move = PieceMove { from: starting_pos, to: target_pos, piece, promotion: promote_to };
@@ -377,17 +385,9 @@ impl Board {
 
         if legal.contains(&target_move) {
             self.apply_move(target_move);
-            self.turn = !self.turn;
-            match self.game_state() {
-                GameState::Checkmate { winner } => println!("Checkmate, winning side: {}", winner),
-                GameState::Stalemate => println!("Draw by stalemate"),
-                GameState::Ongoing => {}
-                GameState::DrawByInsufficientMaterial => println!("Draw by insufficient material."),
-                GameState::DrawByFiftyMove => println!("Draw by fifty move rule."),
-                GameState::DrawByRepetition => println!("Draw by repetition.")
-            }
+            MoveResult::Ok(self.game_state())
         } else {
-            println!("Invalid move!");
+            MoveResult::Illegal
         }
 
 
@@ -448,6 +448,7 @@ impl Board {
 
         if piece_move.piece.kind == Pawn || captured.is_some() {
             self.halfmove = 0;
+            self.history.clear();
         } else {
             self.halfmove += 1;
         }
@@ -463,6 +464,7 @@ impl Board {
         self.board_state[target_y][target_x] = Some(after_promote); // And place it
         self.hash = self.hash();
         self.history.push(self.hash);
+        self.turn = !self.turn;
     }
 
     fn find_king(&self, color: Color) -> Option<(usize, usize)> {
@@ -550,7 +552,6 @@ impl Board {
             for m in self.legal_moves(from) {
                 let mut next = self.clone();
                 next.apply_move(m);
-                next.turn = !next.turn;
                 nodes += next.perft(depth - 1)
             }
         }
@@ -563,7 +564,6 @@ impl Board {
             for m in self.legal_moves(from) {
                 let mut next = self.clone();
                 next.apply_move(m);
-                next.turn = !next.turn;
                 let n = next.perft(depth - 1);
                 println!("{}{}: {}", coordinate_to_square(&m.from), coordinate_to_square(&m.to), n);
                 total += n;
@@ -614,6 +614,11 @@ impl Board {
             }
             _ => false
         }
+    }
+
+    fn repetition(&self) -> bool {
+        let current = *self.history.last().unwrap();
+        self.history.iter().filter(|&&h| h == current).count() >= 3
     }
 
     pub fn print_board(&self) {
