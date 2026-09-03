@@ -400,27 +400,20 @@ impl Board {
         if self.board_state[target_y][target_x] != None {
             // Capture logic, maybe push them into an array in the future?
             let captured_piece = self.board_state[target_y][target_x].take().unwrap();
-            let index = start_y * 8 + start_x;
-            self.hash ^= ZOBRIST.random_table[piece_move.piece.color as usize][piece_move.piece.kind as usize][index];
             // If a rook is captured, revoke castling rights
             if captured_piece.kind == Rook && castling_pos.is_some() {
                 let c = castling_pos.clone().unwrap();
-                self.castling[c.clone()] = false;
-                self.hash ^= ZOBRIST.castling[c as usize]
+                self.castling[c] = false;
             }
         }
 
         if piece_move.piece.kind == Pawn && Some((target_x, target_y)) == self.en_passant {
-            let piece = self.board_state[start_y][target_x].take().unwrap(); // En passant capture
-            let index = start_y * 8 + target_x;
-            self.hash ^= ZOBRIST.random_table[piece.color as usize][piece.kind as usize][index];
+            self.board_state[start_y][target_x] = None; // En passant capture
         }
         if piece_move.piece.kind == Pawn && (target_y as i32 - start_y as i32).abs() == 2 {
             self.en_passant = Some((start_x, (start_y + target_y) / 2));
-            self.hash ^= ZOBRIST.en_passant_file[start_x]
         } else {
             self.en_passant = None; // clear en_passant
-            self.hash ^= ZOBRIST.en_passant_file[self.en_passant.unwrap().0]
         }
 
         // Castling logic
@@ -429,15 +422,11 @@ impl Board {
             match piece_move.piece.color {
                 Black => {
                     self.castling[BlackKing] = false;
-                    self.hash ^= ZOBRIST.castling[BlackKing as usize];
                     self.castling[BlackQueen] = false;
-                    self.hash ^= ZOBRIST.castling[BlackQueen as usize];
                 }
                 White => {
                     self.castling[WhiteKing] = false;
-                    self.hash ^= ZOBRIST.castling[WhiteKing as usize];
                     self.castling[WhiteQueen] = false;
-                    self.hash ^= ZOBRIST.castling[WhiteQueen as usize];
                 }
             }
 
@@ -446,25 +435,15 @@ impl Board {
                 let (rook_from_x, rook_to_x) = if target_x == 6 { (7, 5) } else { (0, 3) };
                 // Move rook into castling position
                 self.board_state[start_y][rook_to_x] = self.board_state[start_y][rook_from_x].take();
-                let from_index = start_y * 8 + rook_from_x;
-                let to_index = start_y * 8 + rook_to_x;
-                self.hash ^= ZOBRIST.random_table[piece_move.piece.color as usize][piece_move.piece.kind as usize][from_index];
-                self.hash ^= ZOBRIST.random_table[piece_move.piece.color as usize][piece_move.piece.kind as usize][to_index];
             }
         }
 
         // If rook is moved
         if piece_move.piece.kind == Rook && castling_pos.is_some() {
             self.castling[check_castling_pos(&piece_move.from).unwrap()] = false;
-            self.hash ^= ZOBRIST.castling[check_castling_pos(&piece_move.from).unwrap() as usize];
         }
 
         let captured = self.board_state[start_y][start_x].take(); // Take the piece
-
-        if captured.is_some() {
-            let index = start_y * 8 + start_x;
-            self.hash ^= ZOBRIST.random_table[captured.unwrap().color as usize][captured.unwrap().kind as usize][index];
-        }
 
 
         if piece_move.piece.kind == Pawn || captured.is_some() {
@@ -482,8 +461,8 @@ impl Board {
         };
 
         self.board_state[target_y][target_x] = Some(after_promote); // And place it
-        let index = target_y * 8 + target_x;
-        self.hash ^= ZOBRIST.random_table[after_promote.color as usize][after_promote.kind as usize][index];
+        self.hash = self.hash();
+        self.history.push(self.hash);
     }
 
     fn find_king(&self, color: Color) -> Option<(usize, usize)> {
