@@ -22,7 +22,8 @@ pub struct Board {
     halfmove: u32,
     fullmove: u32,
     hash: u64,
-    history: Vec<u64>
+    history: Vec<u64>,
+    irreversible: usize
 }
 
 pub struct Unmake {
@@ -31,6 +32,7 @@ pub struct Unmake {
     en_passant: Option<(usize, usize)>,
     halfmove: u32,
     hash: u64,
+    irreversible: usize,
 }
 
 impl fmt::Display for Board {
@@ -61,6 +63,7 @@ impl Default for Board {
             fullmove: 1,
             hash: 0,
             history: vec![],
+            irreversible: 0,
         }
     }
 }
@@ -370,11 +373,19 @@ impl Board {
     // filters out all the legal moves
     fn legal_moves(&mut self, from: (usize, usize)) -> Vec<PieceMove> {
         let pseudo = self.pseudo_legal_moves(from);
-        pseudo.into_iter().filter(|m| {
-            let mut cloned_board = self.clone();
-            cloned_board.make(*m);
-            !cloned_board.is_in_check(m.piece.color)
-        }).collect()
+        let mut out = Vec::with_capacity(pseudo.len()); // preallocate
+
+        for m in pseudo {
+            let undo = self.make(m);
+            let leaves_king_in_check = self.is_in_check(m.piece.color);
+            self.unmake(m, undo);
+
+            if !leaves_king_in_check {
+                out.push(m);
+            }
+        }
+
+        out
     }
 
     pub fn make_move(&mut self, starting_pos: (usize, usize), target_pos: (usize, usize), promote_to: Option<Kind>) -> MoveResult {
@@ -408,6 +419,7 @@ impl Board {
             en_passant: self.en_passant,
             halfmove: self.halfmove,
             hash: self.hash,
+            irreversible: self.irreversible,
         };
 
         let (start_x, start_y) = piece_move.from;
@@ -459,12 +471,12 @@ impl Board {
             self.castling[check_castling_pos(&piece_move.from).unwrap()] = false;
         }
 
-        let captured = self.board_state[start_y][start_x].take(); // Take the piece
+        self.board_state[start_y][start_x] = None; // Take the piece
 
-
-        if piece_move.piece.kind == Pawn || captured.is_some() {
+        let was_capture = undo.captured.is_some();
+        if piece_move.piece.kind == Pawn || was_capture {
             self.halfmove = 0;
-            self.history.clear();
+            self.irreversible = self.history.len();
         } else {
             self.halfmove += 1;
         }
@@ -496,7 +508,7 @@ impl Board {
             self.board_state[piece_move.from.1][rook_from_x] = self.board_state[piece_move.from.1][rook_to_x].take();
         }
 
-        if piece_move.piece.kind == Pawn && Some((piece_move.to.0, piece_move.to.1)) == self.en_passant {
+        if piece_move.piece.kind == Pawn && Some((piece_move.to.0, piece_move.to.1)) == undo.en_passant {
             self.board_state[piece_move.from.1][piece_move.to.0] = Some(Piece { kind: Pawn, color: !piece_move.piece.color });
         }
 
@@ -506,6 +518,7 @@ impl Board {
         self.hash = undo.hash;
         self.history.pop();
         self.turn = !self.turn;
+        self.irreversible = undo.irreversible;
     }
 
     fn find_king(&self, color: Color) -> Option<(usize, usize)> {
@@ -659,7 +672,7 @@ impl Board {
 
     fn repetition(&self) -> bool {
         let current = *self.history.last().unwrap();
-        self.history.iter().filter(|&&h| h == current).count() >= 3
+        self.history[self.irreversible..].iter().filter(|&&h| h == current).count() >= 3
     }
 
     pub fn print_board(&self) {
