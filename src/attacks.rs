@@ -69,13 +69,10 @@ impl Board {
     }
 
     pub(crate) fn is_in_check(&self, color: Color) -> bool {
-        match self.find_king(color) {
-            None => false,
-            Some(k) => self.is_attacked(k, !color),
-        }
+        self.is_attacked(self.king_pos[color as usize], !color)
     }
 
-    fn find_king(&self, color: Color) -> Option<(usize, usize)> {
+    pub(crate) fn find_king(&self, color: Color) -> Option<(usize, usize)> {
         for rank in 0..8 {
             for file in 0..8 {
                 let Some(piece) = self.board_state[rank][file] else {

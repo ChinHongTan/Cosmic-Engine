@@ -76,8 +76,8 @@ impl Display for Kind {
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Color {
-    Black,
-    White
+    Black = 0,
+    White = 1
 }
 
 impl Not for Color {

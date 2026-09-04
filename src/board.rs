@@ -18,7 +18,8 @@ pub struct Board {
     pub(crate) fullmove: u32,
     pub(crate) hash: u64,
     pub(crate) history: Vec<u64>,
-    pub(crate) irreversible: usize
+    pub(crate) irreversible: usize,
+    pub(crate) king_pos: [(usize, usize); 2]
 }
 
 pub struct Unmake {
@@ -26,8 +27,7 @@ pub struct Unmake {
     castling: CastlingRights,
     en_passant: Option<(usize, usize)>,
     halfmove: u32,
-    hash: u64,
-    irreversible: usize,
+    king_pos: [(usize, usize); 2]
 }
 
 impl fmt::Display for Board {
@@ -59,6 +59,7 @@ impl Default for Board {
             hash: 0,
             history: vec![],
             irreversible: 0,
+            king_pos: [(4, 7), (4, 0)]
         }
     }
 }
@@ -86,6 +87,11 @@ impl Board {
     pub(crate) fn finalize(mut self) -> Board {
         self.hash = self.hash();
         self.history.push(self.hash);
+        for c in [Black, White] {
+            if let Some(pos) = self.find_king(c) {
+                self.king_pos[c as usize] = pos;
+            }
+        }
         self
     }
 
@@ -169,6 +175,8 @@ impl Board {
 
         if legal.contains(&target_move) {
             self.make(target_move);
+            self.hash = self.hash();
+            self.history.push(self.hash);
             MoveResult::Ok(self.game_state())
         } else {
             MoveResult::Illegal
@@ -183,8 +191,7 @@ impl Board {
             castling: self.castling.clone(),
             en_passant: self.en_passant,
             halfmove: self.halfmove,
-            hash: self.hash,
-            irreversible: self.irreversible,
+            king_pos: self.king_pos,
         };
 
         let (start_x, start_y) = piece_move.from;
@@ -212,6 +219,8 @@ impl Board {
         // Castling logic
         // If king is moved
         if piece_move.piece.kind == King {
+            // Update king position
+            self.king_pos[piece_move.piece.color as usize] = piece_move.to;
             match piece_move.piece.color {
                 Black => {
                     self.castling[BlackKing] = false;
@@ -255,8 +264,6 @@ impl Board {
         };
 
         self.board_state[target_y][target_x] = Some(after_promote); // And place it
-        self.hash = self.hash();
-        self.history.push(self.hash);
         self.turn = !self.turn;
 
         undo
@@ -280,10 +287,8 @@ impl Board {
         self.castling = undo.castling;
         self.en_passant = undo.en_passant;
         self.halfmove = undo.halfmove;
-        self.hash = undo.hash;
-        self.history.pop();
         self.turn = !self.turn;
-        self.irreversible = undo.irreversible;
+        self.king_pos = undo.king_pos;
     }
 
     // A square is dark if (file + rank) is even, light if odd.
