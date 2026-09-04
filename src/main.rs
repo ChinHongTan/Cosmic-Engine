@@ -4,8 +4,12 @@ mod board;
 mod piece;
 mod square;
 mod castling;
-pub mod piece_move;
-pub mod zobrist;
+mod piece_move;
+mod zobrist;
+mod movegen;
+mod attacks;
+mod fen;
+mod perft;
 
 fn main() {
     let mut board = Board::new(); // Init board

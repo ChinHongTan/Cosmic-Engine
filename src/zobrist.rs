@@ -1,3 +1,4 @@
+use std::sync::LazyLock;
 use rand::rngs::StdRng;
 use rand::{RngExt, SeedableRng};
 
@@ -30,3 +31,5 @@ impl Zobrist {
         }
     }
 }
+
+pub static ZOBRIST: LazyLock<Zobrist> = LazyLock::new(Zobrist::new);

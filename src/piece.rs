@@ -33,24 +33,6 @@ impl Kind {
         }
     }
 
-    pub fn char_to_piece(c: char) -> Piece {
-        match c {
-            'p' => Piece { kind: Pawn, color: Black },
-            'r' => Piece { kind: Rook, color: Black },
-            'n' => Piece { kind: Knight, color: Black },
-            'b' => Piece { kind: Bishop, color: Black },
-            'q' => Piece { kind: Queen, color: Black },
-            'k' => Piece { kind: King, color: Black },
-            'P' => Piece { kind: Pawn, color: White },
-            'R' => Piece { kind: Rook, color: White },
-            'N' => Piece { kind: Knight, color: White },
-            'B' => Piece { kind: Bishop, color: White },
-            'Q' => Piece { kind: Queen, color: White },
-            'K' => Piece { kind: King, color: White },
-            _ => panic!("Unknown piece!")
-        }
-    }
-
     pub fn move_delta(self) -> &'static[(i32, i32)] {
         match self {
             Pawn => &[],
@@ -86,17 +68,9 @@ impl Kind {
     }
 }
 
-impl fmt::Display for Kind {
+impl Display for Kind {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let symbol = match self {
-            Pawn => 'P',
-            King => 'K',
-            Knight => 'N',
-            Rook => 'R',
-            Bishop => 'B',
-            Queen => 'Q',
-        };
-        write!(f, "{}", symbol)
+        write!(f, "{}", self.symbol())
     }
 }
 
@@ -146,6 +120,24 @@ impl Piece {
             White => {
                 self.kind.symbol()
             }
+        }
+    }
+
+    pub fn char_to_piece(c: char) -> Piece {
+        match c {
+            'p' => Piece { kind: Pawn, color: Black },
+            'r' => Piece { kind: Rook, color: Black },
+            'n' => Piece { kind: Knight, color: Black },
+            'b' => Piece { kind: Bishop, color: Black },
+            'q' => Piece { kind: Queen, color: Black },
+            'k' => Piece { kind: King, color: Black },
+            'P' => Piece { kind: Pawn, color: White },
+            'R' => Piece { kind: Rook, color: White },
+            'N' => Piece { kind: Knight, color: White },
+            'B' => Piece { kind: Bishop, color: White },
+            'Q' => Piece { kind: Queen, color: White },
+            'K' => Piece { kind: King, color: White },
+            _ => panic!("Unknown piece!")
         }
     }
 }
