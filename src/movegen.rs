@@ -169,6 +169,25 @@ impl Board {
         out
     }
 
+    // legal moves without creating a new vector
+    pub(crate) fn all_legal_moves(&mut self, from: (usize, usize), out: &mut Vec<PieceMove>) {
+        for rank in 0..8 {
+            for file in 0..8 {
+                let Some(p) = self.board_state[rank][file] else { continue };
+                if p.color != self.turn { continue }
+                let pseudo = self.pseudo_legal_moves(from);
+                out.extend(pseudo);
+            }
+        }
+
+        out.retain(|&m| {
+            let undo = self.make(m);
+            let legal = !self.is_in_check(m.piece.color);
+            self.unmake(m, undo);
+            legal
+        })
+    }
+
     pub(crate) fn has_legal_moves(&mut self) -> bool {
         for from in self.all_squares_with_own_pieces(self.turn) {
             for _m in self.legal_moves(from) {

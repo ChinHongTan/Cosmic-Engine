@@ -3,7 +3,7 @@ use crate::castling::CastlingSide::{BlackKing, BlackQueen, WhiteKing, WhiteQueen
 use crate::piece::Color;
 use crate::piece::Color::{Black, White};
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub enum CastlingSide {
     WhiteKing = 0,
     WhiteQueen = 1,

@@ -174,9 +174,12 @@ impl Board {
         let legal = self.legal_moves(starting_pos);
 
         if legal.contains(&target_move) {
-            self.make(target_move);
+            let undo = self.make(target_move);
             self.hash = self.hash();
             self.history.push(self.hash);
+            if piece.kind == Pawn || undo.captured.is_some() {
+                self.irreversible = self.history.len() - 1;   // index just pushed
+            }
             MoveResult::Ok(self.game_state())
         } else {
             MoveResult::Illegal
@@ -202,7 +205,7 @@ impl Board {
             let captured_piece = self.board_state[target_y][target_x].take().unwrap();
             // If a rook is captured, revoke castling rights
             if captured_piece.kind == Rook && castling_pos.is_some() {
-                let c = castling_pos.clone().unwrap();
+                let c = castling_pos.unwrap();
                 self.castling[c] = false;
             }
         }
@@ -250,7 +253,6 @@ impl Board {
         let was_capture = undo.captured.is_some();
         if piece_move.piece.kind == Pawn || was_capture {
             self.halfmove = 0;
-            self.irreversible = self.history.len();
         } else {
             self.halfmove += 1;
         }
