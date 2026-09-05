@@ -2,7 +2,7 @@ use crate::board::Board;
 use crate::castling::CastlingSide;
 use crate::castling::CastlingSide::{BlackKing, BlackQueen, WhiteKing, WhiteQueen};
 use crate::piece::Color::{Black, White};
-use crate::piece::Kind::{Bishop, King, Knight, Pawn, Queen, Rook};
+use crate::piece::Kind::{King, Pawn};
 use crate::piece::{Color, Piece};
 use crate::piece_move::PieceMove;
 
@@ -16,11 +16,18 @@ impl Board {
     ];
 
     // Get all possible moves for a piece (excluding pawn moves)
-    pub(crate) fn piece_moves(&self, piece: Piece, starting_pos: (usize, usize)) -> Vec<(usize, usize)> {
+    pub(crate) fn piece_moves(&self, piece: Piece, starting_pos: (usize, usize), out: &mut Vec<PieceMove>) {
+
         let deltas = piece.kind.move_delta();
         let slider = piece.kind.is_slider();
         let (start_x, start_y) = starting_pos;
-        let mut possible_moves: Vec<(usize, usize)> = Vec::new();
+
+        let mut piece_move = PieceMove {
+            to: (0, 0),
+            from: (start_x, start_y),
+            piece,
+            promotion: None,
+        };
 
         for (dx, dy) in deltas {
             let mut new_x = start_x as i32 + dx;
@@ -31,11 +38,13 @@ impl Board {
                     if target_piece.color == piece.color {
                         break
                     } else {
-                        possible_moves.push((new_x as usize, new_y as usize));
+                        piece_move.to = (new_x as usize, new_y as usize);
+                        out.push(piece_move);
                         break
                     }
                 }
-                possible_moves.push((new_x as usize, new_y as usize));
+                piece_move.to = (new_x as usize, new_y as usize);
+                out.push(piece_move);
                 // if not slider, stop checking
                 if slider == false {
                     break
@@ -46,15 +55,19 @@ impl Board {
         }
         // Add case for king castling
         if piece.kind == King {
-            possible_moves.append(&mut self.castle_moves(piece.color));
+            self.castle_moves(piece, piece.color, out);
         }
-        possible_moves
     }
 
     // Get all possible moves for pawns on board
-    fn pawn_moves(&self, piece: Piece, starting_pos: (usize, usize)) -> Vec<(usize, usize)> {
-        let mut possible_moves: Vec<(usize, usize)> = Vec::new();
+    fn pawn_moves(&self, piece: Piece, starting_pos: (usize, usize), out: &mut Vec<PieceMove>) {
         let (start_x, start_y) = starting_pos;
+        let mut piece_move = PieceMove {
+            to: (0, 0),
+            from: (start_x, start_y),
+            piece,
+            promotion: None,
+        };
         let (dy, start_rank) = match piece.color {
             Black => {
                 (-1i32, 6)
@@ -78,93 +91,80 @@ impl Board {
 
             if let Some(p) = self.board_state[new_y][new_x] {
                 if p.color != piece.color {
-                    possible_moves.push((new_x, new_y));
+                    piece_move.to = (new_x, new_y);
+                    out.push(piece_move);
                 }
             } else if self.en_passant == Some((new_x, new_y)) {
-                possible_moves.push((new_x, new_y));
+                piece_move.to = (new_x, new_y);
+                out.push(piece_move);
             }
         }
 
         // Front
         // if not blocked
         let None = self.board_state[new_y][start_x] else {
-            return possible_moves;
+            return;
         };
 
-        possible_moves.push((start_x, new_y));
+        piece_move.to = (start_x, new_y);
+        out.push(piece_move);
 
         let new_2y = (start_y as i32 + 2 * dy) as usize;
 
         // Two steps ahead
         if let Some(_p) = self.board_state[new_2y][start_x] {
-            return possible_moves;
+            return;
         } else {
             if start_y == start_rank {
-                possible_moves.push((start_x, new_2y));
+                piece_move.to = (start_x, new_2y);
+                out.push(piece_move);
             }
         };
-
-        possible_moves
     }
 
-    fn castle_moves(&self, color: Color) -> Vec<(usize, usize)> {
+    fn castle_moves(&self, piece: Piece, color: Color, out: &mut Vec<PieceMove>) {
         let rank = match color { White => 0, Black => 7 };
-        let mut out = Vec::new();
 
-        for (side, _kx, king_to, _rook_from, empty, safe) in Self::CASTLES {
+        for (side, king_from, king_to, _rook_from, empty, safe) in Self::CASTLES {
             if side.color() != color { continue } // color doesn't match
             if !self.castling[side] { continue } // castling rights revoked
             if empty.iter().any(|&f| self.board_state[rank][f].is_some()) { continue } // If any cell in between is empty
             if self.is_attacked((4, rank), !color) { continue } // currently in check
             if safe.iter().any(|&f| self.is_attacked((f, rank), !color)) { continue } // If any cell is being attacked
-            out.push((king_to, rank));
+            let piece_move = PieceMove {
+                to: (king_to, rank),
+                from: (king_from, rank),
+                piece,
+                promotion: None,
+            };
+            out.push(piece_move);
         }
-        out
     }
 
-    fn pseudo_legal_moves(&self, from: (usize, usize)) -> Vec<PieceMove> {
+    fn pseudo_legal_moves(&self, from: (usize, usize), out: &mut Vec<PieceMove>) {
         let (start_x, start_y) = from;
 
-        let piece = self.board_state[start_y][start_x].unwrap();
-
-        let possible_moves = match piece.kind {
-            Pawn => self.pawn_moves(piece, from),
-            _ => self.piece_moves(piece, from),
+        let Some(piece) = self.board_state[start_y][start_x] else {
+            return;
         };
 
-        let promo_rank = match piece.color {
-            White => 7,
-            Black => 0,
-        };
-
-        let mut out = Vec::new();
-
-        for m in possible_moves {
-            if piece.kind == Pawn && m.1 == promo_rank {
-                for k in [Queen, Rook, Bishop, Knight] {
-                    out.push(PieceMove {from, to: m, piece, promotion: Some(k) });
-                }
-            } else {
-                out.push(PieceMove { from, to: m, piece, promotion: None });
-            }
+        match piece.kind {
+            Pawn => self.pawn_moves(piece, from, out),
+            _ => self.piece_moves(piece, from, out),
         }
-        out
     }
 
     // filters out all the legal moves
     pub(crate) fn legal_moves(&mut self, from: (usize, usize)) -> Vec<PieceMove> {
-        let pseudo = self.pseudo_legal_moves(from);
-        let mut out = Vec::with_capacity(pseudo.len()); // preallocate
+        let mut out = Vec::with_capacity(64);
+        self.pseudo_legal_moves(from, &mut out);
 
-        for m in pseudo {
+        out.retain(|&m| {
             let undo = self.make(m);
-            let leaves_king_in_check = self.is_in_check(m.piece.color);
+            let legal = !self.is_in_check(m.piece.color);
             self.unmake(m, undo);
-
-            if !leaves_king_in_check {
-                out.push(m);
-            }
-        }
+            legal
+        });
 
         out
     }
@@ -175,8 +175,7 @@ impl Board {
             for file in 0..8 {
                 let Some(p) = self.board_state[rank][file] else { continue };
                 if p.color != self.turn { continue }
-                let pseudo = self.pseudo_legal_moves((file, rank));
-                out.extend(pseudo);
+                self.pseudo_legal_moves((file, rank), out);
             }
         }
 
