@@ -170,12 +170,12 @@ impl Board {
     }
 
     // legal moves without creating a new vector
-    pub(crate) fn all_legal_moves(&mut self, from: (usize, usize), out: &mut Vec<PieceMove>) {
+    pub(crate) fn all_legal_moves(&mut self, out: &mut Vec<PieceMove>) {
         for rank in 0..8 {
             for file in 0..8 {
                 let Some(p) = self.board_state[rank][file] else { continue };
                 if p.color != self.turn { continue }
-                let pseudo = self.pseudo_legal_moves(from);
+                let pseudo = self.pseudo_legal_moves((file, rank));
                 out.extend(pseudo);
             }
         }
