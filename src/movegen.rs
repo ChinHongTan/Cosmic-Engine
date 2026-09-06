@@ -2,7 +2,7 @@ use crate::board::Board;
 use crate::castling::CastlingSide;
 use crate::castling::CastlingSide::{BlackKing, BlackQueen, WhiteKing, WhiteQueen};
 use crate::piece::Color::{Black, White};
-use crate::piece::Kind::{King, Pawn};
+use crate::piece::Kind::{Bishop, King, Knight, Pawn, Queen, Rook};
 use crate::piece::{Color, Piece};
 use crate::piece_move::PieceMove;
 
@@ -16,7 +16,7 @@ impl Board {
     ];
 
     // Get all possible moves for a piece (excluding pawn moves)
-    pub(crate) fn piece_moves(&self, piece: Piece, starting_pos: (usize, usize), out: &mut Vec<PieceMove>) {
+    fn piece_moves(&self, piece: Piece, starting_pos: (usize, usize), out: &mut Vec<PieceMove>) {
 
         let deltas = piece.kind.move_delta();
         let slider = piece.kind.is_slider();
@@ -55,18 +55,22 @@ impl Board {
         }
         // Add case for king castling
         if piece.kind == King {
-            self.castle_moves(piece, piece.color, out);
+            self.castle_moves(piece, out);
         }
     }
 
     // Get all possible moves for pawns on board
     fn pawn_moves(&self, piece: Piece, starting_pos: (usize, usize), out: &mut Vec<PieceMove>) {
         let (start_x, start_y) = starting_pos;
-        let mut piece_move = PieceMove {
+        let piece_move = PieceMove {
             to: (0, 0),
             from: (start_x, start_y),
             piece,
             promotion: None,
+        };
+        let promo_rank = match piece.color {
+            Black => 0,
+            White => 7
         };
         let (dy, start_rank) = match piece.color {
             Black => {
@@ -91,12 +95,10 @@ impl Board {
 
             if let Some(p) = self.board_state[new_y][new_x] {
                 if p.color != piece.color {
-                    piece_move.to = (new_x, new_y);
-                    out.push(piece_move);
+                    Board::push_pawn(piece_move, (new_x, new_y), promo_rank, out);
                 }
             } else if self.en_passant == Some((new_x, new_y)) {
-                piece_move.to = (new_x, new_y);
-                out.push(piece_move);
+                Board::push_pawn(piece_move, (new_x, new_y), promo_rank, out);
             }
         }
 
@@ -106,8 +108,7 @@ impl Board {
             return;
         };
 
-        piece_move.to = (start_x, new_y);
-        out.push(piece_move);
+        Board::push_pawn(piece_move, (start_x, new_y), promo_rank, out);
 
         let new_2y = (start_y as i32 + 2 * dy) as usize;
 
@@ -116,21 +117,20 @@ impl Board {
             return;
         } else {
             if start_y == start_rank {
-                piece_move.to = (start_x, new_2y);
-                out.push(piece_move);
+                Board::push_pawn(piece_move, (start_x, new_2y), promo_rank, out);
             }
         };
     }
 
-    fn castle_moves(&self, piece: Piece, color: Color, out: &mut Vec<PieceMove>) {
-        let rank = match color { White => 0, Black => 7 };
+    fn castle_moves(&self, piece: Piece, out: &mut Vec<PieceMove>) {
+        let rank = match piece.color { White => 0, Black => 7 };
 
         for (side, king_from, king_to, _rook_from, empty, safe) in Self::CASTLES {
-            if side.color() != color { continue } // color doesn't match
+            if side.color() != piece.color { continue } // color doesn't match
             if !self.castling[side] { continue } // castling rights revoked
             if empty.iter().any(|&f| self.board_state[rank][f].is_some()) { continue } // If any cell in between is empty
-            if self.is_attacked((4, rank), !color) { continue } // currently in check
-            if safe.iter().any(|&f| self.is_attacked((f, rank), !color)) { continue } // If any cell is being attacked
+            if self.is_attacked((4, rank), !piece.color) { continue } // currently in check
+            if safe.iter().any(|&f| self.is_attacked((f, rank), !piece.color)) { continue } // If any cell is being attacked
             let piece_move = PieceMove {
                 to: (king_to, rank),
                 from: (king_from, rank),
@@ -138,6 +138,18 @@ impl Board {
                 promotion: None,
             };
             out.push(piece_move);
+        }
+    }
+
+    fn push_pawn(mut m: PieceMove, to: (usize, usize), promo_rank: usize, out: &mut Vec<PieceMove>) {
+        m.to = to;
+        if to.1 == promo_rank {
+            for k in [Queen, Knight, Rook, Bishop] {
+                m.promotion = Some(k);
+                out.push(m);
+            }
+        } else {
+            out.push(m);
         }
     }
 
