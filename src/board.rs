@@ -138,6 +138,11 @@ impl Board {
         h
     }
 
+    pub fn get_piece(&self, pos: (usize, usize)) -> Option<Piece> {
+        let (file, rank) = pos;
+        self.board_state[rank][file]
+    }
+
     pub fn game_state(&mut self) -> GameState {
         if self.halfmove >= 100 {
             return GameState::DrawByFiftyMove;
@@ -202,12 +207,10 @@ impl Board {
         let castling_pos = check_castling_pos(&piece_move.from);
         if self.board_state[target_y][target_x] != None {
             // Capture logic, maybe push them into an array in the future?
-            let captured_piece = self.board_state[target_y][target_x].take().unwrap();
-            // If a rook is captured, revoke castling rights
-            if captured_piece.kind == Rook && castling_pos.is_some() {
-                let c = castling_pos.unwrap();
-                self.castling[c] = false;
-            }
+            let _captured_piece = self.board_state[target_y][target_x].take().unwrap();
+            // If a move involves corner, revoke castling rights
+            if let Some(c) = check_castling_pos(&piece_move.from) { self.castling[c] = false; }
+            if let Some(c) = check_castling_pos(&piece_move.to) { self.castling[c] = false; }
         }
 
         if piece_move.piece.kind == Pawn && Some((target_x, target_y)) == self.en_passant {

@@ -110,16 +110,13 @@ impl Board {
 
         Board::push_pawn(piece_move, (start_x, new_y), promo_rank, out);
 
-        let new_2y = (start_y as i32 + 2 * dy) as usize;
-
-        // Two steps ahead
-        if let Some(_p) = self.board_state[new_2y][start_x] {
-            return;
-        } else {
-            if start_y == start_rank {
+        if start_y == start_rank {
+            let new_2y = (start_y as i32 + 2 * dy) as usize;
+            if self.board_state[new_2y][start_x].is_none() {
                 Board::push_pawn(piece_move, (start_x, new_2y), promo_rank, out);
             }
-        };
+        }
+
     }
 
     fn castle_moves(&self, piece: Piece, out: &mut Vec<PieceMove>) {

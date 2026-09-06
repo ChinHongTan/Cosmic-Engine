@@ -5,3 +5,6 @@ edition = "2024"
 
 [dependencies]
 rand = "0.10.2"
+
+[profile.test]
+opt-level = 3
