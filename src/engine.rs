@@ -1,35 +1,76 @@
 use crate::board::Board;
-use crate::piece::{Kind};
 use crate::piece::Color::{Black, White};
-use crate::piece::Kind::{Bishop, King, Knight, Pawn, Queen, Rook};
+use crate::piece_move::PieceMove;
+use crate::square::coordinate_to_square;
 
 impl Board {
-    pub(crate) fn evaluate(&self) -> i32 {
-        const PIECE_VALUE: [(Kind, i32); 6] = [
-            (Pawn, 100),
-            (King, 0),
-            (Knight, 320),
-            (Rook, 500),
-            (Bishop, 330),
-            (Queen, 900)
-        ];
-        let all_white_piece = self.all_squares_with_own_pieces(White);
-        let mut score = 0;
-        for p in all_white_piece {
-            for (kind, value) in PIECE_VALUE {
-                if self.get_piece(p).unwrap().kind == kind {
-                    score += value;
+    pub fn evaluate(&self) -> i32 {
+        let mut material = 0;
+        for rank in 0..8 {
+            for file in 0..8 {
+                let Some(p) = self.board_state[rank][file] else { continue };
+                match p.color {
+                    Black => material += p.kind.value(),
+                    White => material -= p.kind.value(),
                 }
             }
         }
-        let all_black_piece = self.all_squares_with_own_pieces(Black);
-        for p in all_black_piece {
-            for (kind, value) in PIECE_VALUE {
-                if self.get_piece(p).unwrap().kind == kind {
-                    score -= value;
-                }
+        // negamax
+        match self.turn {
+            Black => -material,
+            White => material
+        }
+    }
+
+    pub fn calculate_move(&mut self) -> Option<PieceMove> {
+        let mut moves = Vec::with_capacity(64);
+        self.all_legal_moves(&mut moves);
+
+        let mut best_score = i32::MIN + 1;
+        let mut best_move = None;
+
+        for m in moves {
+            let undo = self.make(m);
+            let score = -self.evaluate(); // turn flipped
+            self.unmake(m, undo);
+
+            if score > best_score {
+                best_score = score;
+                best_move = Some(m)
             }
         }
-        score
+        best_move
+    }
+
+    pub fn negamax(&mut self, depth: u32) -> i32 {
+        if depth == 0 {
+            return self.evaluate();
+        }
+
+        let mut moves = Vec::with_capacity(64);
+        self.all_legal_moves(&mut moves);
+
+        let mut best = i32::MIN + 1;
+        if moves.len() == 0 {
+            return if self.is_in_check(self.turn) { -1000 } else { 0 }
+        }
+        for m in moves {
+            let undo = self.make(m);
+            let score = -self.negamax(depth - 1);
+            self.unmake(m, undo);
+            best = best.max(score);
+        }
+        best
+    }
+
+    pub fn search_divide(&mut self, depth: u32) {
+        let mut moves = Vec::with_capacity(64);
+        self.all_legal_moves(&mut moves);
+        for m in moves {
+            let undo = self.make(m);
+            let score = -self.negamax(depth - 1);
+            self.unmake(m, undo);
+            println!("{}{}: {}", coordinate_to_square(&m.from), coordinate_to_square(&m.to), score);
+        }
     }
 }

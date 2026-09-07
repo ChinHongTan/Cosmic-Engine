@@ -15,10 +15,21 @@ pub enum Kind {
 }
 
 impl Kind {
-    pub fn is_slider(self) -> bool {
+    pub const fn is_slider(self) -> bool {
         match self {
             Pawn | King | Knight => false,
             Rook | Bishop | Queen => true,
+        }
+    }
+
+    pub const fn value(self) -> i32 {
+        match self {
+            Pawn => 100,
+            King => 0,
+            Knight => 320,
+            Rook => 500,
+            Bishop => 330,
+            Queen => 900,
         }
     }
 
@@ -33,7 +44,7 @@ impl Kind {
         }
     }
 
-    pub fn move_delta(self) -> &'static[(i32, i32)] {
+    pub const fn move_delta(self) -> &'static[(i32, i32)] {
         match self {
             Pawn => &[],
             King | Queen => {
