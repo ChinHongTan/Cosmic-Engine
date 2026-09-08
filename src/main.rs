@@ -15,13 +15,17 @@ mod perft;
 pub mod engine;
 
 fn main() {
-    let mut board = Board::from_fen("4k2q/8/8/8/8/8/8/4K2R w K - 0 1"); // Init board
+    let mut board = Board::new(); // Init board
     println!("Check board perft");
     let start = std::time::Instant::now();
     let nodes = board.perft(5);
     println!("{} nodes in {:?} ({:.0} nps)",
              nodes, start.elapsed(), nodes as f64 / start.elapsed().as_secs_f64());
-    println!("{}", board.negamax(7));
+    println!("{:?}", board.best_move(5));
+    let start = std::time::Instant::now();
+    let nodes = board.negamax(5, 1).1;
+    println!("{} nodes in {:?} ({:.0} nps)",
+             nodes, start.elapsed(), nodes as f64 / start.elapsed().as_secs_f64());
 
     println!("Check white pawn 1 step");
     board.print_board();
