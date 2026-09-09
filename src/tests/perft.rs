@@ -40,3 +40,15 @@ fn capturing_rook_on_home_square_revokes_castling() {
     b.make_move((5, 6), (7, 7), None);   // Nxh8
     assert!(!b.castling[BlackKing]);
 }
+
+#[test]
+fn alpha_beta_matches_plain_negamax() {
+    for fen in ["rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1", "8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1"] {
+        let mut b = Board::from_fen(fen);
+        assert_eq!(
+            b.negamax(4, 0, -Board::INF, Board::INF),
+            b.negamax_plain(4, 0),
+            "{fen}"
+        );
+    }
+}

@@ -5,7 +5,7 @@ use crate::square::coordinate_to_square;
 
 impl Board {
     const MATE: i32 = 100_000;
-    const INF: i32 = 1_000_000;
+    pub(crate) const INF: i32 = 1_000_000;
     pub fn evaluate(&self) -> i32 {
         let mut material = 0;
         for rank in 0..8 {
@@ -29,7 +29,7 @@ impl Board {
         if depth == 0 {
             return self.evaluate();
         }
-        
+
         let mut moves = Vec::with_capacity(64);
         self.all_legal_moves(&mut moves);
         if moves.len() == 0 {
@@ -48,6 +48,29 @@ impl Board {
             }
         }
         alpha
+    }
+
+    pub fn negamax_plain(&mut self, depth: u32, ply: u32) -> i32 {
+        self.nodes += 1;
+        if depth == 0 {
+            return self.evaluate();
+        }
+
+        let mut moves = Vec::with_capacity(64);
+        self.all_legal_moves(&mut moves);
+        if moves.len() == 0 {
+            return if self.is_in_check(self.turn) { -Self::MATE + ply as i32 } else { 0 }
+        }
+
+        let mut best = -Self::INF;
+
+        for m in moves {
+            let undo = self.make(m);
+            let score = -self.negamax_plain(depth - 1, ply + 1);
+            self.unmake(m, undo);
+            best = best.max(score);
+        }
+        best
     }
 
     pub fn best_move(&mut self, depth: u32) -> Option<PieceMove> {
