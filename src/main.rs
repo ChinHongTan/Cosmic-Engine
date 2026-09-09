@@ -15,15 +15,18 @@ mod perft;
 pub mod engine;
 
 fn main() {
+    const INF: i32 = 1_000_000;
     let mut board = Board::new(); // Init board
     println!("Check board perft");
     let start = std::time::Instant::now();
-    let nodes = board.perft(5);
+    let nodes = board.perft(7);
     println!("{} nodes in {:?} ({:.0} nps)",
              nodes, start.elapsed(), nodes as f64 / start.elapsed().as_secs_f64());
-    println!("{:?}", board.best_move(5));
+    println!("{:?}", board.best_move(7));
+    board.nodes = 0;
     let start = std::time::Instant::now();
-    let nodes = board.negamax(5, 1).1;
+    board.negamax(7, 1, -INF, INF);
+    let nodes = board.nodes;
     println!("{} nodes in {:?} ({:.0} nps)",
              nodes, start.elapsed(), nodes as f64 / start.elapsed().as_secs_f64());
 
