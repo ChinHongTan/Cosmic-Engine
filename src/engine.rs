@@ -32,6 +32,7 @@ impl Board {
 
         let mut moves = Vec::with_capacity(64);
         self.all_legal_moves(&mut moves);
+        moves.sort_by_key(|m| -self.move_score(&m));
         if moves.len() == 0 {
             return if self.is_in_check(self.turn) { -Self::MATE + ply as i32 } else { 0 }
         }
@@ -79,6 +80,7 @@ impl Board {
 
         let mut best_score = -Self::INF;
         let mut best_move = None;
+        moves.sort_by_key(|m| -self.move_score(&m));
 
         for m in moves {
             let undo = self.make(m);
@@ -92,6 +94,14 @@ impl Board {
         }
 
         best_move
+    }
+
+    pub fn move_score(&self, m: &PieceMove) -> i32 {
+        match self.get_piece(m.to) {
+            // Most valuable victim, least valuable attacker
+            Some(victim) => victim.kind.value() * 10 - m.piece.kind.value(),
+            None => 0
+        }
     }
 
     pub fn search_divide(&mut self, depth: u32, ply: u32) {
