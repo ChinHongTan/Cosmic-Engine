@@ -3,7 +3,7 @@ use crate::castling::CastlingSide;
 use crate::castling::CastlingSide::{BlackKing, BlackQueen, WhiteKing, WhiteQueen};
 use crate::piece::Color::{Black, White};
 use crate::piece::Kind::{Bishop, King, Knight, Pawn, Queen, Rook};
-use crate::piece::{Color, Piece};
+use crate::piece::Piece;
 use crate::piece_move::PieceMove;
 
 impl Board {
@@ -163,23 +163,32 @@ impl Board {
         }
     }
 
-    // filters out all the legal moves
-    pub(crate) fn legal_moves(&mut self, from: (usize, usize)) -> Vec<PieceMove> {
-        let mut out = Vec::with_capacity(64);
-        self.pseudo_legal_moves(from, &mut out);
-
-        out.retain(|&m| {
+    // Drop the moves from `start` onwards that leave our own king in check, keeping order
+    fn retain_legal(&mut self, out: &mut Vec<PieceMove>, start: usize) {
+        let mut write = start;
+        for read in start..out.len() {
+            let m = out[read];
             let undo = self.make(m);
             let legal = !self.is_in_check(m.piece.color);
             self.unmake(m, undo);
-            legal
-        });
-
-        out
+            if legal {
+                out[write] = m;
+                write += 1;
+            }
+        }
+        out.truncate(write);
     }
 
-    // legal moves without creating a new vector
+    // Append the legal moves of the piece on `from`
+    pub(crate) fn legal_moves(&mut self, from: (usize, usize), out: &mut Vec<PieceMove>) {
+        let start = out.len();
+        self.pseudo_legal_moves(from, out);
+        self.retain_legal(out, start);
+    }
+
+    // Append the legal moves of every piece of the side to move
     pub(crate) fn all_legal_moves(&mut self, out: &mut Vec<PieceMove>) {
+        let start = out.len();
         for rank in 0..8 {
             for file in 0..8 {
                 let Some(p) = self.board_state[rank][file] else { continue };
@@ -187,36 +196,20 @@ impl Board {
                 self.pseudo_legal_moves((file, rank), out);
             }
         }
-
-        out.retain(|&m| {
-            let undo = self.make(m);
-            let legal = !self.is_in_check(m.piece.color);
-            self.unmake(m, undo);
-            legal
-        })
+        self.retain_legal(out, start);
     }
 
     pub(crate) fn has_legal_moves(&mut self) -> bool {
-        for from in self.all_squares_with_own_pieces(self.turn) {
-            for _m in self.legal_moves(from) {
-                return true
+        let mut moves = Vec::with_capacity(64);
+        for rank in 0..8 {
+            for file in 0..8 {
+                let Some(p) = self.board_state[rank][file] else { continue };
+                if p.color != self.turn { continue }
+                moves.clear();
+                self.legal_moves((file, rank), &mut moves);
+                if !moves.is_empty() { return true }
             }
         }
         false
-    }
-
-    pub(crate) fn all_squares_with_own_pieces(&self, color: Color) -> Vec<(usize, usize)> {
-        let mut output = Vec::new();
-        for rank in 0..8 {
-            for file in 0..8 {
-                let Some(piece) = self.board_state[rank][file] else {
-                    continue
-                };
-                if piece.color == color {
-                    output.push((file, rank));
-                }
-            }
-        }
-        output
     }
 }

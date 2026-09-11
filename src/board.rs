@@ -178,7 +178,8 @@ impl Board {
         }
 
         let target_move = PieceMove { from: starting_pos, to: target_pos, piece, promotion: promote_to };
-        let legal = self.legal_moves(starting_pos);
+        let mut legal = Vec::with_capacity(64);
+        self.legal_moves(starting_pos, &mut legal);
 
         if legal.contains(&target_move) {
             let undo = self.make(target_move);
@@ -191,8 +192,6 @@ impl Board {
         } else {
             MoveResult::Illegal
         }
-
-
     }
 
     pub(crate) fn make(&mut self, piece_move: PieceMove) -> Unmake {
