@@ -1,5 +1,6 @@
 use crate::board::Board;
 use crate::piece::Color::{Black, White};
+use crate::piece::Kind::Pawn;
 use crate::piece_move::PieceMove;
 use crate::square::coordinate_to_square;
 
@@ -27,7 +28,7 @@ impl Board {
     pub fn negamax(&mut self, depth: u32, ply: u32, mut alpha: i32, beta: i32) -> i32 {
         self.nodes += 1;
         if depth == 0 {
-            return self.evaluate();
+            return self.quiescene(alpha, beta);
         }
 
         let mut moves = Vec::with_capacity(64);
@@ -113,5 +114,37 @@ impl Board {
             self.unmake(m, undo);
             println!("{}{}: {}", coordinate_to_square(&m.from), coordinate_to_square(&m.to), score);
         }
+    }
+
+    pub fn quiescene(&mut self, mut alpha: i32, beta: i32) -> i32 {
+        self.nodes += 1;
+
+        let stand_pat = self.evaluate();
+        if stand_pat >= beta { return beta; }
+        if stand_pat > alpha { alpha = stand_pat; }
+
+        let mut captures = Vec::with_capacity(64);
+        self.capture_moves(&mut captures);
+        captures.sort_by_key(|m| -self.move_score(m));
+
+        for m in captures {
+            let undo = self.make(m);
+            let score = -self.quiescene(-beta, -alpha);
+            self.unmake(m, undo);
+
+            if score >= beta { return beta; }
+            if score > alpha { alpha = score; }
+        }
+
+        alpha
+    }
+
+    pub fn capture_moves(&mut self, out: &mut Vec<PieceMove>) {
+        self.all_legal_moves(out);
+        out.retain(|m| {
+            self.get_piece(m.to).is_some()
+                || (m.piece.kind == Pawn && Some(m.to) == self.en_passant)
+                || m.promotion.is_some()
+        });
     }
 }
