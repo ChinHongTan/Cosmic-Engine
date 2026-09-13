@@ -50,15 +50,17 @@ impl Board {
     pub fn negamax(&mut self, depth: u32, ply: u32, mut alpha: i32, beta: i32) -> i32 {
         self.nodes += 1;
         if depth == 0 {
-            return self.quiescene(alpha, beta);
+            return self.quiescence(alpha, beta);
         }
 
         let mut moves = Vec::with_capacity(64);
         self.all_legal_moves(&mut moves);
-        moves.sort_by_key(|m| -self.move_score(&m));
+
         if moves.len() == 0 {
             return if self.is_in_check(self.turn) { -Self::MATE + ply as i32 } else { 0 }
         }
+
+        moves.sort_by_key(|m| -self.move_score(&m));
 
         for m in moves {
             let undo = self.make(m);
@@ -97,13 +99,26 @@ impl Board {
         best
     }
 
-    pub fn best_move(&mut self, depth: u32) -> Option<PieceMove> {
+    pub fn search(&mut self, max_depth: u32) -> Option<PieceMove> {
+        let mut best = None;
+        for depth in 1..=max_depth {
+            best = self.best_move(depth, best);
+            println!("depth {depth}: {:?}", best)
+        }
+        best
+    }
+
+    pub fn best_move(&mut self, depth: u32, prev: Option<PieceMove>) -> Option<PieceMove> {
         let mut moves = Vec::with_capacity(64);
         self.all_legal_moves(&mut moves);
 
+        moves.sort_by_key(|m| {
+            if Some(*m) == prev { -1_000_000 }        // previous best goes first
+            else { -self.move_score(m) }
+        });
+
         let mut best_score = -Self::INF;
         let mut best_move = None;
-        moves.sort_by_key(|m| -self.move_score(&m));
 
         for m in moves {
             let undo = self.make(m);
@@ -138,7 +153,7 @@ impl Board {
         }
     }
 
-    pub fn quiescene(&mut self, mut alpha: i32, beta: i32) -> i32 {
+    pub fn quiescence(&mut self, mut alpha: i32, beta: i32) -> i32 {
         self.nodes += 1;
 
         let stand_pat = self.evaluate();
@@ -151,7 +166,7 @@ impl Board {
 
         for m in captures {
             let undo = self.make(m);
-            let score = -self.quiescene(-beta, -alpha);
+            let score = -self.quiescence(-beta, -alpha);
             self.unmake(m, undo);
 
             if score >= beta { return beta; }

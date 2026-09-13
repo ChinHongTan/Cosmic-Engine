@@ -64,7 +64,7 @@ fn main() {
         let result = match board.turn {
             Color::Black => {
                 let start = std::time::Instant::now();
-                let best = board.best_move(6).unwrap();
+                let best = board.search(6).unwrap();
                 println!("Engine: {:?} ({:?})", best, start.elapsed());
                 board.make_move(best.from, best.to, best.promotion)
             }
