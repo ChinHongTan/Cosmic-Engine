@@ -8,6 +8,14 @@ use crate::zobrist::ZOBRIST;
 use std::fmt;
 use std::fmt::Formatter;
 
+pub struct TTEntry {
+    key: u64,
+    depth: u32,
+    score: i32,
+    node_type: NodeType,
+    best_move: Option<PieceMove>,
+}
+
 #[derive(Clone, Debug)]
 pub struct Board {
     pub(crate) board_state: [[Option<Piece>; 8]; 8],
@@ -21,6 +29,7 @@ pub struct Board {
     pub(crate) irreversible: usize,
     pub(crate) king_pos: [(usize, usize); 2],
     pub(crate) nodes: u64,
+    pub(crate) tt: Vec<Option<TTEntry>>,
 }
 
 pub struct Unmake {
