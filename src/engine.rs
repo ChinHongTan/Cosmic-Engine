@@ -156,9 +156,7 @@ impl Board {
     pub fn quiescence(&mut self, mut alpha: i32, beta: i32) -> i32 {
         self.nodes += 1;
 
-        let stand_pat = self.evaluate();
-        if stand_pat >= beta { return beta; }
-        if stand_pat > alpha { alpha = stand_pat; }
+
 
         let mut captures = Vec::with_capacity(64);
         self.capture_moves(&mut captures);
