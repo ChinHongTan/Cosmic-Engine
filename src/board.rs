@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use crate::castling::CastlingSide::{BlackKing, BlackQueen, WhiteKing, WhiteQueen};
 use crate::castling::{CastlingRights, check_castling_pos};
 use crate::piece::Color::{Black, White};
@@ -21,6 +22,7 @@ pub struct Board {
     pub(crate) irreversible: usize,
     pub(crate) king_pos: [(usize, usize); 2],
     pub(crate) nodes: u64,
+    pub(crate) hit_pairs: HashMap<u64, u32>,
 }
 
 pub struct Unmake {
@@ -62,6 +64,7 @@ impl Default for Board {
             irreversible: 0,
             king_pos: [(4, 7), (4, 0)],
             nodes: 0,
+            hit_pairs: HashMap::new(),
         }
     }
 }

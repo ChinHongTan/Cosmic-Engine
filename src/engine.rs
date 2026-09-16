@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use crate::board::Board;
 use crate::piece::Color::{Black, White};
 use crate::piece::Kind::{King, Pawn};
@@ -49,6 +50,9 @@ impl Board {
 
     pub fn negamax(&mut self, depth: u32, ply: u32, mut alpha: i32, beta: i32) -> i32 {
         self.nodes += 1;
+        let hash = self.hash();
+        *self.hit_pairs.entry(hash).or_insert(0) += 1;
+
         if depth == 0 {
             return self.quiescence(alpha, beta);
         }
@@ -122,7 +126,7 @@ impl Board {
 
         for m in moves {
             let undo = self.make(m);
-            let score = -self.negamax(depth - 1, 1, -Self::INF, -best_score);
+            let score = -self.negamax(depth - 1, 1, -Self::INF, Self::INF);
             self.unmake(m, undo);
 
             if score > best_score {
@@ -156,7 +160,9 @@ impl Board {
     pub fn quiescence(&mut self, mut alpha: i32, beta: i32) -> i32 {
         self.nodes += 1;
 
-
+        let stand_pat = self.evaluate();
+        if stand_pat >= beta { return beta; }
+        if stand_pat > alpha { alpha = stand_pat }
 
         let mut captures = Vec::with_capacity(64);
         self.capture_moves(&mut captures);
