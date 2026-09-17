@@ -3,6 +3,7 @@ use crate::board::Board;
 use crate::piece::Color::{Black, White};
 use crate::piece::Kind::{King, Pawn};
 use crate::piece_move::PieceMove;
+use crate::search::Search;
 use crate::square::coordinate_to_square;
 
 impl Board {
@@ -51,7 +52,8 @@ impl Board {
     pub fn negamax(&mut self, depth: u32, ply: u32, mut alpha: i32, beta: i32) -> i32 {
         self.nodes += 1;
         let hash = self.hash();
-        *self.hit_pairs.entry(hash).or_insert(0) += 1;
+
+        if let Some(e) = Search::tt_probe(self, hash);
 
         if depth == 0 {
             return self.quiescence(alpha, beta);

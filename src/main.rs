@@ -20,6 +20,7 @@ mod perft;
 
 #[cfg(test)] mod tests;
 pub mod engine;
+pub mod search;
 
 fn get_user_move(board: &mut Board) -> PieceMove {
     loop {
