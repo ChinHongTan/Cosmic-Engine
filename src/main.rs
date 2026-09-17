@@ -67,13 +67,6 @@ fn main() {
                 let start = std::time::Instant::now();
                 let best = board.search(5).unwrap();
                 println!("Engine: {:?} ({:?})", best, start.elapsed());
-                println!("Total nodes: {:?}", board.nodes);
-                let mut biggest_repeat = 0;
-                for (_key, value) in &board.hit_pairs {
-                    biggest_repeat = biggest_repeat.max(*value);
-                }
-                println!("Distinct positions: {:?}", board.hit_pairs.len());
-                println!("Biggest repeat count: {:?}", biggest_repeat);
                 board.make_move(best.from, best.to, best.promotion)
             }
             Color::White => {

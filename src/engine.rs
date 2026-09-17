@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use crate::board::Board;
 use crate::piece::Color::{Black, White};
 use crate::piece::Kind::{King, Pawn};
@@ -9,6 +8,7 @@ use crate::square::coordinate_to_square;
 impl Board {
     const MATE: i32 = 100_000;
     pub(crate) const INF: i32 = 1_000_000;
+    const SEARCH = Search::new();
     pub fn evaluate(&self) -> i32 {
         let mut score = 0;
         for rank in 0..8 {
