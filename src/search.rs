@@ -1,5 +1,6 @@
 use crate::board::Board;
 use crate::piece_move::PieceMove;
+use crate::search::NodeType::{Exact, LowerBound, UpperBound};
 
 #[derive(Copy, Clone, Debug)]
 pub enum NodeType {
@@ -10,6 +11,7 @@ pub enum NodeType {
 
 #[derive(Copy, Clone, Debug)]
 pub struct TTEntry {
+    score: i32,
     depth: u32,
     hash: u64,
     node_type: NodeType
@@ -32,15 +34,33 @@ impl Search {
         Some(*entry)
     }
 
-    pub fn tt_store() {
-        todo!()
+    pub fn tt_store(&mut self, hash: u64, score: i32, depth: u32, node_type: NodeType) {
+        let index = hash as usize & (self.tt.len() - 1);
+        let entry = TTEntry { score, depth, hash, node_type };
+        self.tt[index] = Some(entry);
     }
 
-    pub fn negamax(&mut self, board: &mut Board, depth: u32, ply: u32, mut alpha: i32, beta: i32) -> i32 {
+    pub fn negamax(&mut self, board: &mut Board, depth: u32, ply: u32, alpha: i32, beta: i32) -> i32 {
         self.nodes += 1;
+        let original_alpha = alpha;
+        let mut best_score= alpha;
         let hash = board.hash();
 
-        if let Some(_e) = self.tt_probe(hash) {}
+        if let Some(e) = self.tt_probe(hash) {
+            if e.depth >= depth {
+                match e.node_type {
+                    LowerBound => {
+                        if e.score >= beta { return e.score }
+                    }
+                    Exact => {
+                        if e.score <= alpha { return e.score }
+                    }
+                    UpperBound => {
+                        return e.score;
+                    }
+                }
+            }
+        }
 
         if depth == 0 {
             return self.quiescence(board, alpha, beta);
@@ -60,13 +80,22 @@ impl Search {
             let score = -self.negamax(board, depth - 1, ply + 1, -beta, -alpha);
             board.unmake(m, undo);
             if score >= beta {
-                return beta;          // cutoff — opponent won't allow this line
+                best_score = beta;          // cutoff — opponent won't allow this line
             }
             if score > alpha {
-                alpha = score;        // new best
+                best_score = score;        // new best
             }
         }
-        alpha
+        let node_type;
+        if best_score >= beta {
+            node_type = LowerBound;
+        } else if best_score > original_alpha {
+            node_type = Exact;
+        } else {
+            node_type = UpperBound;
+        }
+        self.tt_store(hash, best_score, depth, node_type);
+        best_score
     }
 
     pub fn quiescence(&mut self, board: &mut Board, mut alpha: i32, beta: i32) -> i32 {
