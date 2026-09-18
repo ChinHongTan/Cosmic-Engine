@@ -20,7 +20,6 @@ pub struct Board {
     pub(crate) history: Vec<u64>,
     pub(crate) irreversible: usize,
     pub(crate) king_pos: [(usize, usize); 2],
-    pub(crate) nodes: u64,
 }
 
 pub struct Unmake {
@@ -61,7 +60,6 @@ impl Default for Board {
             history: vec![],
             irreversible: 0,
             king_pos: [(4, 7), (4, 0)],
-            nodes: 0,
         }
     }
 }

@@ -5,6 +5,7 @@ use crate::board::GameState::Ongoing;
 use crate::piece::{Color};
 use crate::piece::Kind::{Bishop, Knight, Queen, Rook};
 use crate::piece_move::PieceMove;
+use crate::search::Search;
 use crate::square::square_to_coordinate;
 
 mod board;
@@ -59,13 +60,14 @@ fn get_user_move(board: &mut Board) -> PieceMove {
 fn main() {
     const INF: i32 = 1_000_000;
     let mut board = Board::new(); // Init board
+    let mut search = Search::new();
     loop {
         board.print_board();
 
         let result = match board.turn {
             Color::Black => {
                 let start = std::time::Instant::now();
-                let best = board.search(5).unwrap();
+                let best = search.search(&mut board, 6).unwrap();
                 println!("Engine: {:?} ({:?})", best, start.elapsed());
                 board.make_move(best.from, best.to, best.promotion)
             }
