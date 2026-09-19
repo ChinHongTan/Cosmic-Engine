@@ -14,7 +14,8 @@ pub struct TTEntry {
     score: i32,
     depth: u32,
     hash: u64,
-    node_type: NodeType
+    node_type: NodeType,
+    best_move: Option<PieceMove>,
 }
 
 pub struct Search {
@@ -34,17 +35,23 @@ impl Search {
         Some(*entry)
     }
 
-    pub fn tt_store(&mut self, hash: u64, score: i32, depth: u32, node_type: NodeType) {
+    pub fn tt_store(&mut self, hash: u64, score: i32, depth: u32, node_type: NodeType, best_move: Option<PieceMove>) {
         let index = hash as usize & (self.tt.len() - 1);
-        let entry = TTEntry { score, depth, hash, node_type };
+        let entry = TTEntry { score, depth, hash, node_type, best_move };
         self.tt[index] = Some(entry);
     }
 
-    pub fn negamax(&mut self, board: &mut Board, depth: u32, ply: u32, alpha: i32, beta: i32) -> i32 {
+    pub fn negamax(&mut self, board: &mut Board, depth: u32, ply: u32, mut alpha: i32, beta: i32) -> i32 {
         self.nodes += 1;
         let original_alpha = alpha;
-        let mut best_score= alpha;
-        let hash = board.hash();
+        let mut best_score= -Board::INF;
+        let mut tt_move = None;
+        let mut best_move = None;
+        let hash = board.hash;
+
+        if depth == 0 {
+            return self.quiescence(board, alpha, beta);
+        }
 
         if let Some(e) = self.tt_probe(hash) {
             if e.depth >= depth {
@@ -53,17 +60,14 @@ impl Search {
                         if e.score >= beta { return e.score }
                     }
                     Exact => {
-                        if e.score <= alpha { return e.score }
+                        return e.score;
                     }
                     UpperBound => {
-                        return e.score;
+                        if e.score <= alpha { return e.score }
                     }
                 }
             }
-        }
-
-        if depth == 0 {
-            return self.quiescence(board, alpha, beta);
+            tt_move = e.best_move;
         }
 
         let mut moves = Vec::with_capacity(64);
@@ -73,17 +77,24 @@ impl Search {
             return if board.is_in_check(board.turn) { -Board::MATE + ply as i32 } else { 0 }
         }
 
-        moves.sort_by_key(|m| -board.move_score(&m));
+        moves.sort_by_key(|m| {
+            if Some(*m) == tt_move { -1_000_000 }
+            else { -board.move_score(&m) }
+        });
 
         for m in moves {
             let undo = board.make(m);
             let score = -self.negamax(board, depth - 1, ply + 1, -beta, -alpha);
             board.unmake(m, undo);
             if score >= beta {
-                best_score = beta;          // cutoff — opponent won't allow this line
+                best_score = score;          // cutoff — opponent won't allow this line
+                best_move = Some(m);
+                break;
             }
-            if score > alpha {
-                best_score = score;        // new best
+            if score > best_score {
+                best_score = score;          // new best
+                best_move = Some(m);
+                if score > alpha { alpha = score; }
             }
         }
         let node_type;
@@ -94,7 +105,7 @@ impl Search {
         } else {
             node_type = UpperBound;
         }
-        self.tt_store(hash, best_score, depth, node_type);
+        self.tt_store(hash, best_score, depth, node_type, best_move);
         best_score
     }
 

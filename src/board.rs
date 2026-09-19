@@ -27,7 +27,8 @@ pub struct Unmake {
     castling: CastlingRights,
     en_passant: Option<(usize, usize)>,
     halfmove: u32,
-    king_pos: [(usize, usize); 2]
+    king_pos: [(usize, usize); 2],
+    hash: u64,
 }
 
 impl fmt::Display for Board {
@@ -181,7 +182,6 @@ impl Board {
 
         if legal.contains(&target_move) {
             let undo = self.make(target_move);
-            self.hash = self.hash();
             self.history.push(self.hash);
             if piece.kind == Pawn || undo.captured.is_some() {
                 self.irreversible = self.history.len() - 1;   // index just pushed
@@ -192,6 +192,23 @@ impl Board {
         }
     }
 
+    fn xor_piece(&mut self, p: Piece, pos: (usize, usize)) {
+        self.hash ^= ZOBRIST.random_table[p.color as usize][p.kind as usize][pos.1 * 8 + pos.0];
+    }
+
+    fn set_square(&mut self, pos: (usize, usize), piece: Option<Piece>) -> Option<Piece> {
+        let old = self.board_state[pos.1][pos.0];
+        if let Some(p) = old { self.xor_piece(p, pos); }
+        self.board_state[pos.1][pos.0] = piece;
+        if let Some(p) = piece { self.xor_piece(p, pos); }
+        old
+    }
+
+    fn move_piece(&mut self, from: (usize, usize), to: (usize, usize)) -> Option<Piece> {
+        let piece = self.set_square(from, None);
+        self.set_square(to, piece)      // returns whatever was captured
+    }
+
     pub(crate) fn make(&mut self, piece_move: PieceMove) -> Unmake {
         let undo = Unmake {
             captured: self.board_state[piece_move.to.1][piece_move.to.0],
@@ -199,21 +216,26 @@ impl Board {
             en_passant: self.en_passant,
             halfmove: self.halfmove,
             king_pos: self.king_pos,
+            hash: self.hash,
         };
+
+        if let Some((f, _)) = self.en_passant { self.hash ^= ZOBRIST.en_passant_file[f]; }
+        for i in 0..4 { if self.castling.0[i] { self.hash ^= ZOBRIST.castling[i]; } }
 
         let (start_x, start_y) = piece_move.from;
         let (target_x, target_y) = piece_move.to;
-        let castling_pos = check_castling_pos(&piece_move.from);
+
+        // If a move involves corner, revoke castling rights
+        if let Some(c) = check_castling_pos(&piece_move.from) { self.castling[c] = false; }
+        if let Some(c) = check_castling_pos(&piece_move.to)   { self.castling[c] = false; }
+
         if self.board_state[target_y][target_x] != None {
             // Capture logic, maybe push them into an array in the future?
-            let _captured_piece = self.board_state[target_y][target_x].take().unwrap();
-            // If a move involves corner, revoke castling rights
-            if let Some(c) = check_castling_pos(&piece_move.from) { self.castling[c] = false; }
-            if let Some(c) = check_castling_pos(&piece_move.to) { self.castling[c] = false; }
+            let _captured = self.set_square((target_x, target_y), None);
         }
 
         if piece_move.piece.kind == Pawn && Some((target_x, target_y)) == self.en_passant {
-            self.board_state[start_y][target_x] = None; // En passant capture
+            self.set_square((target_x, start_y), None);  // En passant capture
         }
         if piece_move.piece.kind == Pawn && (target_y as i32 - start_y as i32).abs() == 2 {
             self.en_passant = Some((start_x, (start_y + target_y) / 2));
@@ -241,16 +263,11 @@ impl Board {
             if (target_x as i32 - start_x as i32).abs() == 2 {
                 let (rook_from_x, rook_to_x) = if target_x == 6 { (7, 5) } else { (0, 3) };
                 // Move rook into castling position
-                self.board_state[start_y][rook_to_x] = self.board_state[start_y][rook_from_x].take();
+                self.move_piece((rook_from_x, start_y), (rook_to_x, start_y));
             }
         }
 
-        // If rook is moved
-        if piece_move.piece.kind == Rook && castling_pos.is_some() {
-            self.castling[check_castling_pos(&piece_move.from).unwrap()] = false;
-        }
-
-        self.board_state[start_y][start_x] = None; // Take the piece
+        self.set_square((start_x, start_y), None);  // Take the piece
 
         let was_capture = undo.captured.is_some();
         if piece_move.piece.kind == Pawn || was_capture {
@@ -267,8 +284,13 @@ impl Board {
             Some(kind) => Piece { kind, color: piece_move.piece.color }
         };
 
-        self.board_state[target_y][target_x] = Some(after_promote); // And place it
+        self.set_square((target_x, target_y), Some(after_promote)); // And place it
         self.turn = !self.turn;
+
+        if let Some((f, _)) = self.en_passant { self.hash ^= ZOBRIST.en_passant_file[f]; }
+        for i in 0..4 { if self.castling.0[i] { self.hash ^= ZOBRIST.castling[i]; } }
+
+        self.hash ^= ZOBRIST.black_to_move;
 
         undo
     }
@@ -293,6 +315,7 @@ impl Board {
         self.halfmove = undo.halfmove;
         self.turn = !self.turn;
         self.king_pos = undo.king_pos;
+        self.hash = undo.hash;
     }
 
     // A square is dark if (file + rank) is even, light if odd.
