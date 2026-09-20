@@ -23,20 +23,40 @@ pub struct Search {
     nodes: u32
 }
 
+// mate score
+const MATE_THRESHOLD: i32 = Board::MATE - 1000;
+
+// Mate scores are -MATE + ply, but a TT entry is keyed by
+// position only and can be read back at a different ply
+fn to_tt_score(score: i32, ply: u32) -> i32 {
+    if score >= MATE_THRESHOLD { score + ply as i32 }
+    else if score <= -MATE_THRESHOLD { score - ply as i32 }
+    else { score }
+}
+
+fn from_tt_score(score: i32, ply: u32) -> i32 {
+    if score >= MATE_THRESHOLD { score - ply as i32 }
+    else if score <= -MATE_THRESHOLD { score + ply as i32 }
+    else { score }
+}
+
 impl Search {
     pub fn new() -> Search {
         Search { tt: vec![None; 1 << 20], nodes: 0 }
     }
 
-    pub fn tt_probe(&self, hash: u64) -> Option<TTEntry> {
+    pub fn tt_probe(&self, hash: u64, ply: u32) -> Option<TTEntry> {
         let index = hash as usize & (self.tt.len() - 1);
         let Some(entry) = &self.tt[index] else { return None };
         if entry.hash != hash { return None }
-        Some(*entry)
+        let mut entry = *entry;
+        entry.score = from_tt_score(entry.score, ply);
+        Some(entry)
     }
 
-    pub fn tt_store(&mut self, hash: u64, score: i32, depth: u32, node_type: NodeType, best_move: Option<PieceMove>) {
+    pub fn tt_store(&mut self, hash: u64, score: i32, depth: u32, ply: u32, node_type: NodeType, best_move: Option<PieceMove>) {
         let index = hash as usize & (self.tt.len() - 1);
+        let score = to_tt_score(score, ply);
         let entry = TTEntry { score, depth, hash, node_type, best_move };
         self.tt[index] = Some(entry);
     }
@@ -53,7 +73,7 @@ impl Search {
             return self.quiescence(board, alpha, beta);
         }
 
-        if let Some(e) = self.tt_probe(hash) {
+        if let Some(e) = self.tt_probe(hash, ply) {
             if e.depth >= depth {
                 match e.node_type {
                     LowerBound => {
@@ -105,7 +125,7 @@ impl Search {
         } else {
             node_type = UpperBound;
         }
-        self.tt_store(hash, best_score, depth, node_type, best_move);
+        self.tt_store(hash, best_score, depth, ply, node_type, best_move);
         best_score
     }
 
@@ -155,7 +175,7 @@ impl Search {
 
         for m in moves {
             let undo = board.make(m);
-            let score = -self.negamax(board, depth - 1, 1, -Board::INF, Board::INF);
+            let score = -self.negamax(board, depth - 1, 1, -Board::INF, -best_score);
             board.unmake(m, undo);
 
             if score > best_score {
