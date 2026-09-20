@@ -156,7 +156,7 @@ impl Search {
         let mut best = None;
         for depth in 1..=max_depth {
             best = self.best_move(board, depth, best);
-            println!("depth {depth}: {:?}", best)
+            // println!("depth {depth}: {:?}", best)
         }
         best
     }

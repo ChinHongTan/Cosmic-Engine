@@ -1,12 +1,12 @@
 use std::io;
-use std::io::Write;
+use std::io::{BufRead, Write};
 use crate::board::{Board, GameState, MoveResult};
 use crate::board::GameState::Ongoing;
 use crate::piece::{Color};
 use crate::piece::Kind::{Bishop, Knight, Queen, Rook};
 use crate::piece_move::PieceMove;
 use crate::search::Search;
-use crate::square::square_to_coordinate;
+use crate::square::{coordinate_to_square, square_to_coordinate};
 
 mod board;
 mod piece;
@@ -23,7 +23,7 @@ mod perft;
 pub mod engine;
 pub mod search;
 
-fn get_user_move(board: &mut Board) -> PieceMove {
+fn get_user_input(board: &mut Board) -> PieceMove {
     loop {
         print!("Your move: ");
         io::stdout().flush().unwrap();
@@ -37,27 +37,35 @@ fn get_user_move(board: &mut Board) -> PieceMove {
             continue
         }
 
-        let Some(from) = square_to_coordinate(&s[0..2]) else { continue };
-        let Some(to) = square_to_coordinate(&s[2..4]) else { continue };
-
-        let promotion = match s.as_bytes().get(4) {
-            Some(b'q') => Some(Queen),
-            Some(b'b') => Some(Bishop),
-            Some(b'r') => Some(Rook),
-            Some(b'n') => Some(Knight),
-            _ => None
-        };
-
-        let mut moves = Vec::new();
-        board.all_legal_moves(&mut moves);
-        if let Some(m) = moves.iter().find(|m| m.to == to && m.from == from && m.promotion == promotion) {
-            return *m
+        match get_move(board, s) {
+            Some(m) => { return m }
+            None => { continue }
         }
-        println!("Illegal move.");
     }
 }
 
-fn main() {
+fn get_move(board: &mut Board, s: &str) -> Option<PieceMove> {
+    let Some(from) = square_to_coordinate(&s[0..2]) else { return None };
+    let Some(to) = square_to_coordinate(&s[2..4]) else { return None };
+
+    let promotion = match s.as_bytes().get(4) {
+        Some(b'q') => Some(Queen),
+        Some(b'b') => Some(Bishop),
+        Some(b'r') => Some(Rook),
+        Some(b'n') => Some(Knight),
+        _ => None
+    };
+
+    let mut moves = Vec::new();
+    board.all_legal_moves(&mut moves);
+    if let Some(m) = moves.iter().find(|m| m.to == to && m.from == from && m.promotion == promotion) {
+        return Some(*m);
+    }
+    eprintln!("Illegal move.");
+    None
+}
+
+fn play_console() {
     const INF: i32 = 1_000_000;
     let mut board = Board::new(); // Init board
     let mut search = Search::new();
@@ -67,12 +75,12 @@ fn main() {
         let result = match board.turn {
             Color::Black => {
                 let start = std::time::Instant::now();
-                let best = search.search(&mut board, 6).unwrap();
+                let best = search.search(&mut board, 10).unwrap();
                 println!("Engine: {:?} ({:?})", best, start.elapsed());
                 board.make_move(best.from, best.to, best.promotion)
             }
             Color::White => {
-                let m = get_user_move(&mut board);
+                let m = get_user_input(&mut board);
                 board.make_move(m.from, m.to, m.promotion)
             }
         };
@@ -119,4 +127,81 @@ fn main() {
     // let nodes = board.nodes;
     // println!("{} nodes in {:?} ({:.0} nps)",
     //          nodes, start.elapsed(), nodes as f64 / start.elapsed().as_secs_f64());
+}
+
+
+fn play_uci() {
+    let stdin = io::stdin();
+    let mut board = Board::new();
+    let mut search = Search::new();
+    let handle = stdin.lock();
+
+    for line in handle.lines() {
+        let line = line.unwrap();
+        let tokens: Vec<&str> = line.split_ascii_whitespace().collect();
+
+        match tokens.first().copied() {
+            Some("uci") => {
+                println!("id name Cosmos Engine");
+                println!("id author Chinono");
+                println!("uciok");
+            }
+            Some("isready") => {
+                println!("readyok");
+            }
+            Some("ucinewgame") => {
+                board = Board::new();
+                search = Search::new();
+            }
+            Some("go") => {
+                let best = search.search(&mut board, 6).unwrap();
+                let promo = match best.promotion {
+                    Some(Queen) => "q", Some(Rook) => "r",
+                    Some(Bishop) => "b", Some(Knight) => "n",
+                    _ => "",
+                };
+                println!("bestmove {}{}{}", coordinate_to_square(&best.from), coordinate_to_square(&best.to), promo);
+            }
+            Some("position") => {
+                let moves_idx = tokens.iter().position(|&t| t == "moves");
+
+                let move_tokens: &[&str] = match moves_idx {
+                    Some(idx) => &tokens[idx + 1..],
+                    None => &[], // No moves were provided
+                };
+
+                let setup_end = moves_idx.unwrap_or(tokens.len());
+                let setup_tokens = &tokens[1..setup_end];
+
+                match setup_tokens.first().copied() {
+                    Some("startpos") => {
+                        board = Board::new();
+                    }
+                    Some("fen") => {
+                        let fen_str = setup_tokens[1..].join(" ");
+                        board = Board::from_fen(fen_str.as_str());
+                    }
+                    _ => {}
+                }
+
+                for uci_move in move_tokens {
+                    // println!("Applying move: {}", uci_move);
+                    let m = get_move(&mut board, uci_move).unwrap();
+                    board.make_move(m.from, m.to, m.promotion);
+                }
+            }
+            Some("quit") => { break }
+            _ => {}
+        }
+    }
+
+    io::stdout().flush().unwrap();
+}
+
+fn main() {
+    if std::env::args().any(|a| a == "--uci") {
+        play_uci();
+    } else {
+        play_console();
+    }
 }
