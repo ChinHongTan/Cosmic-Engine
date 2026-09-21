@@ -1,3 +1,4 @@
+use std::time::{Duration, Instant};
 use crate::board::Board;
 use crate::piece_move::PieceMove;
 use crate::search::NodeType::{Exact, LowerBound, UpperBound};
@@ -20,7 +21,9 @@ pub struct TTEntry {
 
 pub struct Search {
     tt: Vec<Option<TTEntry>>,
-    nodes: u32
+    nodes: u32,
+    deadline: Option<Instant>,
+    stop: bool,
 }
 
 // mate score
@@ -42,7 +45,15 @@ fn from_tt_score(score: i32, ply: u32) -> i32 {
 
 impl Search {
     pub fn new() -> Search {
-        Search { tt: vec![None; 1 << 20], nodes: 0 }
+        Search { tt: vec![None; 1 << 20], nodes: 0, deadline: None, stop: false }
+    }
+
+    fn check_time(&mut self) {
+        if self.nodes & 2047 == 0 {
+            if let Some(d) = self.deadline {
+                if Instant::now() >= d { self.stop = true; }
+            }
+        }
     }
 
     pub fn tt_probe(&self, hash: u64, ply: u32) -> Option<TTEntry> {
@@ -62,7 +73,9 @@ impl Search {
     }
 
     pub fn negamax(&mut self, board: &mut Board, depth: u32, ply: u32, mut alpha: i32, beta: i32) -> i32 {
+        if self.stop { return 0; }
         self.nodes += 1;
+        self.check_time();
         let original_alpha = alpha;
         let mut best_score= -Board::INF;
         let mut tt_move = None;
@@ -125,12 +138,15 @@ impl Search {
         } else {
             node_type = UpperBound;
         }
+        if self.stop { return 0; }
         self.tt_store(hash, best_score, depth, ply, node_type, best_move);
         best_score
     }
 
     pub fn quiescence(&mut self, board: &mut Board, mut alpha: i32, beta: i32) -> i32 {
+        if self.stop { return 0; }
         self.nodes += 1;
+        self.check_time();
 
         let stand_pat = board.evaluate();
         if stand_pat >= beta { return beta; }
@@ -153,11 +169,30 @@ impl Search {
     }
 
     pub fn search(&mut self, board: &mut Board, max_depth: u32) -> Option<PieceMove> {
+        self.stop = false;
         let mut best = None;
         for depth in 1..=max_depth {
             best = self.best_move(board, depth, best);
             // println!("depth {depth}: {:?}", best)
         }
+        best
+    }
+
+    pub fn search_timed(&mut self, board: &mut Board, max_depth: u32, budget: Duration) -> Option<PieceMove> {
+        self.stop = false;
+        self.deadline = None;
+
+        // depth 1 always completes, so we're guaranteed a legal move
+        let mut best = self.best_move(board, 1, None);
+
+        self.deadline = Some(Instant::now() + budget);
+        for depth in 2..=max_depth {
+            let m = self.best_move(board, depth, best);
+            if self.stop { break; }   // partial depth
+            best = m;
+        }
+
+        self.deadline = None;
         best
     }
 

@@ -1,5 +1,6 @@
 use std::io;
 use std::io::{BufRead, Write};
+use std::time::{Duration};
 use crate::board::{Board, GameState, MoveResult};
 use crate::board::GameState::Ongoing;
 use crate::piece::{Color};
@@ -154,7 +155,40 @@ fn play_uci() {
                 search = Search::new();
             }
             Some("go") => {
-                let best = search.search(&mut board, 6).unwrap();
+                let mut wtime = 0;
+                let mut btime = 0;
+                let mut winc  = 0;
+                let mut binc  = 0;
+                let mut movetime: Option<u64> = None;
+
+                let mut i = 1;
+                while i + 1 < tokens.len() {
+                    let v = tokens[i + 1].parse::<u64>().unwrap_or(0);
+                    match tokens[i] {
+                        "wtime" => wtime = v,
+                        "btime" => btime = v,
+                        "winc"  => winc  = v,
+                        "binc"  => binc  = v,
+                        "movetime" => movetime = Some(v),
+                        _ => {}
+                    }
+                    i += 2;
+                }
+
+                let (my_time, my_inc) = match board.turn {
+                    Color::White => (wtime, winc),
+                    Color::Black => (btime, binc),
+                };
+
+                const OVERHEAD: u64 = 200;
+                let budget = movetime.unwrap_or_else(|| {
+                    (my_time / 20 + my_inc / 2).min(my_time.saturating_sub(OVERHEAD)).max(1)
+                });
+
+                // let before = Instant::now();
+                let best = search.search_timed(&mut board, 64, Duration::from_millis(budget)).unwrap();
+                // let elapsed = before.elapsed();
+                // eprintln!("budget {}ms, used {}ms", budget, elapsed.as_millis());
                 let promo = match best.promotion {
                     Some(Queen) => "q", Some(Rook) => "r",
                     Some(Bishop) => "b", Some(Knight) => "n",
@@ -199,9 +233,9 @@ fn play_uci() {
 }
 
 fn main() {
-    if std::env::args().any(|a| a == "--uci") {
-        play_uci();
-    } else {
+    if std::env::args().any(|a| a == "--console") {
         play_console();
+    } else {
+        play_uci();
     }
 }
