@@ -67,7 +67,6 @@ fn get_move(board: &mut Board, s: &str) -> Option<PieceMove> {
 }
 
 fn play_console() {
-    const INF: i32 = 1_000_000;
     let mut board = Board::new(); // Init board
     let mut search = Search::new();
     loop {
@@ -112,22 +111,6 @@ fn play_console() {
             }
         }
     }
-
-
-
-
-    // println!("Check board perft");
-    // let start = std::time::Instant::now();
-    // let nodes = board.perft(7);
-    // println!("{} nodes in {:?} ({:.0} nps)",
-    //          nodes, start.elapsed(), nodes as f64 / start.elapsed().as_secs_f64());
-    // println!("{:?}", board.best_move(8));
-    // board.nodes = 0;
-    // let start = std::time::Instant::now();
-    // board.negamax(8, 1, -INF, INF);
-    // let nodes = board.nodes;
-    // println!("{} nodes in {:?} ({:.0} nps)",
-    //          nodes, start.elapsed(), nodes as f64 / start.elapsed().as_secs_f64());
 }
 
 

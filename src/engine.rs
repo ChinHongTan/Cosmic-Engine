@@ -53,13 +53,4 @@ impl Board {
             None => 0
         }
     }
-
-    pub fn capture_moves(&mut self, out: &mut Vec<PieceMove>) {
-        self.all_legal_moves(out);
-        out.retain(|m| {
-            self.get_piece(m.to).is_some()
-                || (m.piece.kind == Pawn && Some(m.to) == self.en_passant)
-                || m.promotion.is_some()
-        });
-    }
 }

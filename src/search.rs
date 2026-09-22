@@ -1,5 +1,6 @@
 use std::time::{Duration, Instant};
 use crate::board::Board;
+use crate::piece::Kind::Pawn;
 use crate::piece_move::PieceMove;
 use crate::search::NodeType::{Exact, LowerBound, UpperBound};
 
@@ -72,7 +73,7 @@ impl Search {
         self.tt[index] = Some(entry);
     }
 
-    pub fn negamax(&mut self, board: &mut Board, depth: u32, ply: u32, mut alpha: i32, beta: i32) -> i32 {
+    pub fn negamax(&mut self, board: &mut Board, mut depth: u32, ply: u32, mut alpha: i32, beta: i32) -> i32 {
         if self.stop { return 0; }
         self.nodes += 1;
         self.check_time();
@@ -83,8 +84,17 @@ impl Search {
         let mut best_move = None;
         let hash = board.hash;
 
+        let in_check = board.is_in_check(board.turn);
+
+        // a mate delivered on the 100th half-move still counts as a mate
+        if board.halfmove >= 100 && (!in_check || board.has_legal_moves()) { return 0; }
+
+        if in_check {
+            depth += 1;
+        }
+
         if depth == 0 {
-            return self.quiescence(board, alpha, beta);
+            return self.quiescence(board, ply, alpha, beta);
         }
 
         if let Some(e) = self.tt_probe(hash, ply) {
@@ -108,7 +118,7 @@ impl Search {
         board.all_legal_moves(&mut moves);
 
         if moves.len() == 0 {
-            return if board.is_in_check(board.turn) { -Board::MATE + ply as i32 } else { 0 }
+            return if in_check { -Board::MATE + ply as i32 } else { 0 }
         }
 
         moves.sort_by_key(|m| {
@@ -146,22 +156,36 @@ impl Search {
         best_score
     }
 
-    pub fn quiescence(&mut self, board: &mut Board, mut alpha: i32, beta: i32) -> i32 {
+    pub fn quiescence(&mut self, board: &mut Board, ply: u32, mut alpha: i32, beta: i32) -> i32 {
         if self.stop { return 0; }
         self.nodes += 1;
         self.check_time();
+        let in_check = board.is_in_check(board.turn);
+        let mut moves = Vec::with_capacity(64);
+        board.all_legal_moves(&mut moves);
 
-        let stand_pat = board.evaluate();
-        if stand_pat >= beta { return beta; }
-        if stand_pat > alpha { alpha = stand_pat }
+        if moves.len() == 0 {
+            return if in_check { -Board::MATE + ply as i32 } else { 0 }
+        }
+        // a quiet check evasion can reach the 100th half-move here
+        if board.halfmove >= 100 { return 0; }
 
-        let mut captures = Vec::with_capacity(64);
-        board.capture_moves(&mut captures);
-        captures.sort_by_key(|m| -board.move_score(m));
+        if !in_check {
+            let stand_pat = board.evaluate();
+            if stand_pat >= beta { return beta; }
+            if stand_pat > alpha { alpha = stand_pat }
+            moves.retain(|m| {
+                board.get_piece(m.to).is_some()
+                    || (m.piece.kind == Pawn && Some(m.to) == board.en_passant)
+                    || m.promotion.is_some()
+            });
+        }
 
-        for m in captures {
+        moves.sort_by_key(|m| -board.move_score(m));
+
+        for m in moves {
             let undo = board.make(m);
-            let score = -self.quiescence(board, -beta, -alpha);
+            let score = -self.quiescence(board, ply + 1, -beta, -alpha);
             board.unmake(m, undo);
 
             if score >= beta { return beta; }
