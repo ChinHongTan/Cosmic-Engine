@@ -347,6 +347,12 @@ impl Board {
         }
     }
 
+    pub(crate) fn is_repeated(&self) -> bool {
+        let n = self.history.len();
+        let lookback = (self.halfmove as usize).min(n - 1);
+        self.history[n - 1 - lookback..n - 1].iter().rev().skip(1).step_by(2).any(|&h| h == self.hash)
+    }
+
     fn repetition(&self) -> bool {
         let current = *self.history.last().unwrap();
         self.history[self.irreversible..].iter().filter(|&&h| h == current).count() >= 3

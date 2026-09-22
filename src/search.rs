@@ -21,7 +21,7 @@ pub struct TTEntry {
 
 pub struct Search {
     tt: Vec<Option<TTEntry>>,
-    nodes: u32,
+    nodes: u64,
     deadline: Option<Instant>,
     stop: bool,
 }
@@ -76,6 +76,7 @@ impl Search {
         if self.stop { return 0; }
         self.nodes += 1;
         self.check_time();
+        if board.is_repeated() { return 0; }
         let original_alpha = alpha;
         let mut best_score= -Board::INF;
         let mut tt_move = None;
@@ -117,7 +118,9 @@ impl Search {
 
         for m in moves {
             let undo = board.make(m);
+            board.history.push(board.hash);
             let score = -self.negamax(board, depth - 1, ply + 1, -beta, -alpha);
+            board.history.pop();
             board.unmake(m, undo);
             if score >= beta {
                 best_score = score;          // cutoff — opponent won't allow this line
@@ -172,7 +175,7 @@ impl Search {
         self.stop = false;
         let mut best = None;
         for depth in 1..=max_depth {
-            best = self.best_move(board, depth, best);
+            best = self.best_move(board, depth, best).0;
             // println!("depth {depth}: {:?}", best)
         }
         best
@@ -181,22 +184,73 @@ impl Search {
     pub fn search_timed(&mut self, board: &mut Board, max_depth: u32, budget: Duration) -> Option<PieceMove> {
         self.stop = false;
         self.deadline = None;
+        self.nodes = 0;
+        let start = Instant::now();
 
         // depth 1 always completes, so we're guaranteed a legal move
-        let mut best = self.best_move(board, 1, None);
+        let (mut best, score) = self.best_move(board, 1, None);
+        self.print_info(board, 1, score, best, start);
 
-        self.deadline = Some(Instant::now() + budget);
+        self.deadline = Some(start + budget);
         for depth in 2..=max_depth {
-            let m = self.best_move(board, depth, best);
+            let (m, score) = self.best_move(board, depth, best);
             if self.stop { break; }   // partial depth
             best = m;
+            self.print_info(board, depth, score, best, start);
         }
 
         self.deadline = None;
         best
     }
 
-    pub fn best_move(&mut self, board: &mut Board, depth: u32, prev: Option<PieceMove>) -> Option<PieceMove> {
+    fn print_info(&self, board: &mut Board, depth: u32, score: i32, best: Option<PieceMove>, start: Instant) {
+        let score_str = if score >= MATE_THRESHOLD {
+            format!("mate {}", (Board::MATE - score + 1) / 2)
+        } else if score <= -MATE_THRESHOLD {
+            format!("mate -{}", (Board::MATE + score) / 2)
+        } else {
+            format!("cp {}", score)
+        };
+
+        let pv: Vec<String> = self.pv_line(board, best, depth).iter().map(|m| m.to_uci()).collect();
+        let ms = start.elapsed().as_millis() as u64;
+        let nps = self.nodes * 1000 / ms.max(1);
+
+        println!("info depth {} score {} nodes {} nps {} time {} pv {}",
+                 depth, score_str, self.nodes, nps, ms, pv.join(" "));
+    }
+
+    // The TT keeps the best move of every searched node
+    fn pv_line(&self, board: &mut Board, best: Option<PieceMove>, depth: u32) -> Vec<PieceMove> {
+        let mut pv = Vec::new();
+        let mut undos = Vec::new();
+        // positions since the last pawn move or capture, including the real game
+        let mut seen = board.history[board.irreversible..].to_vec();
+        let mut next = best;
+
+        while let Some(m) = next {
+            // a hash collision can hand back a move from another position
+            let mut legal = Vec::with_capacity(64);
+            board.all_legal_moves(&mut legal);
+            if !legal.contains(&m) { break; }
+
+            undos.push(board.make(m));
+            pv.push(m);
+
+            // the game ends on a threefold, so the PV must too
+            let repeats = seen.iter().filter(|&&h| h == board.hash).count();
+            seen.push(board.hash);
+            if pv.len() >= depth as usize || repeats >= 2 || board.halfmove >= 100 { break; }
+            next = self.tt_probe(board.hash, 0).and_then(|e| e.best_move);
+        }
+
+        for (m, undo) in pv.iter().zip(undos).rev() {
+            board.unmake(*m, undo);
+        }
+        pv
+    }
+
+    pub fn best_move(&mut self, board: &mut Board, depth: u32, prev: Option<PieceMove>) -> (Option<PieceMove>, i32) {
         let mut moves = Vec::with_capacity(64);
         board.all_legal_moves(&mut moves);
 
@@ -210,7 +264,9 @@ impl Search {
 
         for m in moves {
             let undo = board.make(m);
+            board.history.push(board.hash);
             let score = -self.negamax(board, depth - 1, 1, -Board::INF, -best_score);
+            board.history.pop();
             board.unmake(m, undo);
 
             if score > best_score {
@@ -219,6 +275,6 @@ impl Search {
             }
         }
 
-        best_move
+        (best_move, best_score)
     }
 }

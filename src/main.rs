@@ -7,7 +7,7 @@ use crate::piece::{Color};
 use crate::piece::Kind::{Bishop, Knight, Queen, Rook};
 use crate::piece_move::PieceMove;
 use crate::search::Search;
-use crate::square::{coordinate_to_square, square_to_coordinate};
+use crate::square::square_to_coordinate;
 
 mod board;
 mod piece;
@@ -189,12 +189,7 @@ fn play_uci() {
                 let best = search.search_timed(&mut board, 64, Duration::from_millis(budget)).unwrap();
                 // let elapsed = before.elapsed();
                 // eprintln!("budget {}ms, used {}ms", budget, elapsed.as_millis());
-                let promo = match best.promotion {
-                    Some(Queen) => "q", Some(Rook) => "r",
-                    Some(Bishop) => "b", Some(Knight) => "n",
-                    _ => "",
-                };
-                println!("bestmove {}{}{}", coordinate_to_square(&best.from), coordinate_to_square(&best.to), promo);
+                println!("bestmove {}", best.to_uci());
             }
             Some("position") => {
                 let moves_idx = tokens.iter().position(|&t| t == "moves");
