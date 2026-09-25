@@ -25,10 +25,12 @@ pub struct Search {
     nodes: u64,
     deadline: Option<Instant>,
     stop: bool,
+    killers: [[Option<PieceMove>; 2]; MAX_PLY],
 }
 
 // mate score
 const MATE_THRESHOLD: i32 = Board::MATE - 1000;
+const MAX_PLY: usize = 128;
 
 // Mate scores are -MATE + ply, but a TT entry is keyed by
 // position only and can be read back at a different ply
@@ -46,7 +48,7 @@ fn from_tt_score(score: i32, ply: u32) -> i32 {
 
 impl Search {
     pub fn new() -> Search {
-        Search { tt: vec![None; 1 << 20], nodes: 0, deadline: None, stop: false }
+        Search { tt: vec![None; 1 << 20], nodes: 0, deadline: None, stop: false, killers: [[None; 2]; MAX_PLY] }
     }
 
     fn check_time(&mut self) {
@@ -71,6 +73,17 @@ impl Search {
         let score = to_tt_score(score, ply);
         let entry = TTEntry { score, depth, hash, node_type, best_move };
         self.tt[index] = Some(entry);
+    }
+
+    fn store_killer(&mut self, m: PieceMove, ply: u32) {
+        if ply as usize >= MAX_PLY {
+            return;
+        }
+        let k = &mut self.killers[ply as usize];
+        if k[0]!= Some(m) {
+            k[1] = k[0];
+            k[0] = Some(m);
+        }
     }
 
     pub fn negamax(&mut self, board: &mut Board, mut depth: u32, ply: u32, mut alpha: i32, beta: i32, allow_null: bool) -> i32 {
@@ -128,9 +141,14 @@ impl Search {
             return if in_check { -Board::MATE + ply as i32 } else { 0 }
         }
 
+        let killers = self.killers.get(ply as usize).copied().unwrap_or([None; 2]);
+
         moves.sort_by_key(|m| {
-            if Some(*m) == tt_move { -1_000_000 }
-            else { -board.move_score(&m) }
+            if Some(*m) == tt_move { (0, 0) }
+            else if board.get_piece(m.to).is_some() { (1, -board.move_score(m)) }
+            else if Some(*m) == killers[0] { (2, 0) }
+            else if Some(*m) == killers[1] { (3, 0) }
+            else { (4, 0) }
         });
 
         for m in moves {
@@ -142,6 +160,10 @@ impl Search {
             if score >= beta {
                 best_score = score;          // cutoff — opponent won't allow this line
                 best_move = Some(m);
+                let quiet = board.get_piece(m.to).is_none()
+                    && m.promotion.is_none()
+                    && !(m.piece.kind == Pawn && Some(m.to) == board.en_passant);
+                if quiet { self.store_killer(m, ply); }
                 break;
             }
             if score > best_score {
@@ -216,6 +238,7 @@ impl Search {
         self.stop = false;
         self.deadline = None;
         self.nodes = 0;
+        self.killers = [[None; 2]; MAX_PLY];
         let start = Instant::now();
 
         // depth 1 always completes, so we're guaranteed a legal move
