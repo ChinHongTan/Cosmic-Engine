@@ -205,7 +205,7 @@ impl Search {
         best
     }
 
-    pub fn search_timed(&mut self, board: &mut Board, max_depth: u32, budget: Duration) -> Option<PieceMove> {
+    pub fn search_timed(&mut self, board: &mut Board, max_depth: u32, soft: Duration, hard: Duration) -> Option<PieceMove> {
         self.stop = false;
         self.deadline = None;
         self.nodes = 0;
@@ -215,12 +215,22 @@ impl Search {
         let (mut best, score) = self.best_move(board, 1, None);
         self.print_info(board, 1, score, best, start);
 
-        self.deadline = Some(start + budget);
+        self.deadline = Some(start + hard);
+        let mut stability = 0;
         for depth in 2..=max_depth {
+            let iter_start = Instant::now();
             let (m, score) = self.best_move(board, depth, best);
-            if self.stop { break; }   // partial depth
+            if self.stop { break; }
+            if depth >= 3 {
+                if best == m { stability += 1; } else { stability = 0; }
+            }
             best = m;
             self.print_info(board, depth, score, best, start);
+            // the longer the best move holds, the sooner we stop looking
+            let mult = 10u32.saturating_sub(stability.min(3));
+            let effective_soft = (soft * mult / 10).min(hard);
+            let last_iter = iter_start.elapsed();
+            if start.elapsed() + last_iter * 2 >= effective_soft { break }
         }
 
         self.deadline = None;

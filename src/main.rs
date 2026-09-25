@@ -1,3 +1,4 @@
+use std::cmp::min;
 use std::io;
 use std::io::{BufRead, Write};
 use std::time::{Duration};
@@ -164,12 +165,19 @@ fn play_uci() {
                 };
 
                 const OVERHEAD: u64 = 200;
-                let budget = movetime.unwrap_or_else(|| {
-                    (my_time / 20 + my_inc / 2).min(my_time.saturating_sub(OVERHEAD)).max(1)
-                });
+
+                let (soft, hard) = if let Some(mt) = movetime {
+                    let t = mt.saturating_sub(OVERHEAD).max(1);
+                    (t, t)
+                } else {
+                    let base = (my_time / 20 + my_inc / 2).min(my_time.saturating_sub(OVERHEAD)).max(1);
+                    let soft = base * 3 / 4;
+                    let hard = min(base * 3 / 2, my_time * 3 / 4).saturating_sub(OVERHEAD).max(soft);
+                    (soft, hard)
+                };
 
                 // let before = Instant::now();
-                let best = search.search_timed(&mut board, 64, Duration::from_millis(budget)).unwrap();
+                let best = search.search_timed(&mut board, 64, Duration::from_millis(soft), Duration::from_millis(hard)).unwrap();
                 // let elapsed = before.elapsed();
                 // eprintln!("budget {}ms, used {}ms", budget, elapsed.as_millis());
                 println!("bestmove {}", best.to_uci());
