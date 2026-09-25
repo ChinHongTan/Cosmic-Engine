@@ -31,6 +31,12 @@ pub struct Unmake {
     hash: u64,
 }
 
+pub struct NullUnmake {
+    en_passant: Option<(usize, usize)>,
+    halfmove: u32,
+    hash: u64,
+}
+
 impl fmt::Display for Board {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         for rank in (0..8).rev() {
@@ -316,6 +322,29 @@ impl Board {
         self.turn = !self.turn;
         self.king_pos = undo.king_pos;
         self.hash = undo.hash;
+    }
+
+    pub(crate) fn make_null(&mut self) -> NullUnmake {
+        let undo = NullUnmake {
+            en_passant: self.en_passant,
+            halfmove: self.halfmove,
+            hash: self.hash,
+        };
+
+        if let Some((f, _)) = self.en_passant { self.hash ^= ZOBRIST.en_passant_file[f]; }
+        self.en_passant = None;
+        self.halfmove = 0;
+        self.turn = !self.turn;
+        self.hash ^= ZOBRIST.black_to_move;
+
+        undo
+    }
+
+    pub(crate) fn unmake_null(&mut self, undo: NullUnmake) {
+        self.en_passant = undo.en_passant;
+        self.halfmove = undo.halfmove;
+        self.hash = undo.hash;
+        self.turn = !self.turn;
     }
 
     // A square is dark if (file + rank) is even, light if odd.

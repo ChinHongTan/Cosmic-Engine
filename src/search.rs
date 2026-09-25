@@ -73,7 +73,7 @@ impl Search {
         self.tt[index] = Some(entry);
     }
 
-    pub fn negamax(&mut self, board: &mut Board, mut depth: u32, ply: u32, mut alpha: i32, beta: i32) -> i32 {
+    pub fn negamax(&mut self, board: &mut Board, mut depth: u32, ply: u32, mut alpha: i32, beta: i32, allow_null: bool) -> i32 {
         if self.stop { return 0; }
         self.nodes += 1;
         self.check_time();
@@ -114,6 +114,13 @@ impl Search {
             tt_move = e.best_move;
         }
 
+        if allow_null && !in_check && depth >= 3 && board.has_non_pawn(board.turn) {
+            let undo = board.make_null();
+            let score = -self.negamax(board, depth - 3, ply + 1, -beta, -beta + 1, false);
+            board.unmake_null(undo);
+            if score >= beta { return beta };
+        }
+
         let mut moves = Vec::with_capacity(64);
         board.all_legal_moves(&mut moves);
 
@@ -129,7 +136,7 @@ impl Search {
         for m in moves {
             let undo = board.make(m);
             board.history.push(board.hash);
-            let score = -self.negamax(board, depth - 1, ply + 1, -beta, -alpha);
+            let score = -self.negamax(board, depth - 1, ply + 1, -beta, -alpha, true);
             board.history.pop();
             board.unmake(m, undo);
             if score >= beta {
@@ -299,7 +306,7 @@ impl Search {
         for m in moves {
             let undo = board.make(m);
             board.history.push(board.hash);
-            let score = -self.negamax(board, depth - 1, 1, -Board::INF, -best_score);
+            let score = -self.negamax(board, depth - 1, 1, -Board::INF, -best_score, true);
             board.history.pop();
             board.unmake(m, undo);
 
