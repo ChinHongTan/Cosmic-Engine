@@ -1,5 +1,5 @@
 use crate::board::Board;
-use crate::piece::Color;
+use crate::piece::{Color};
 use crate::piece::Color::{Black, White};
 use crate::piece::Kind::{King, Pawn};
 use crate::piece_move::PieceMove;
@@ -7,9 +7,9 @@ use crate::piece_move::PieceMove;
 impl Board {
     pub(crate) const MATE: i32 = 100_000;
     pub(crate) const INF: i32 = 1_000_000;
+
     pub fn evaluate(&self) -> i32 {
-        let mut score = 0;
-        let endgame = self.endgame();
+        let (mut mg, mut eg, mut phase) = (0, 0, 0);
         for rank in 0..8 {
             for file in 0..8 {
                 let Some(p) = self.board_state[rank][file] else { continue };
@@ -18,32 +18,22 @@ impl Board {
                     White => (7 - rank) * 8 + file,
                 };
 
-                let value = p.kind.value() + p.kind.table(endgame)[index];
+                let (m, e) = p.kind.score(index);
+
                 match p.color {
-                    Black => score -= value,
-                    White => score += value,
+                    White => { mg += m; eg += e },
+                    Black => { mg -= m; eg -= e },
                 }
+                phase += p.kind.phase();
             }
         }
+        let mg_phase = phase.min(24);
+        let score = (mg * mg_phase + eg * (24 - mg_phase)) / 24;
         // negamax
         match self.turn {
             Black => -score,
             White => score
         }
-    }
-
-    fn endgame(&self) -> bool {
-        let mut non_pawn = 0;
-        for rank in 0..8 {
-            for file in 0..8 {
-                if let Some(p) = self.board_state[rank][file] {
-                    if p.kind != Pawn && p.kind != King {
-                        non_pawn += p.kind.value();
-                    }
-                }
-            }
-        }
-        non_pawn < 1300
     }
 
     pub fn move_score(&self, m: &PieceMove) -> i32 {
