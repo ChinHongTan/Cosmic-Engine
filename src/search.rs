@@ -151,18 +151,34 @@ impl Search {
             else { (4, 0) }
         });
 
-        for m in moves {
+        for (i, m) in moves.into_iter().enumerate() {
+            let quiet = board.get_piece(m.to).is_none() && m.promotion.is_none() && !(m.piece.kind == Pawn && Some(m.to) == board.en_passant);
+            let killer = killers.contains(&Some(m));
+
             let undo = board.make(m);
             board.history.push(board.hash);
-            let score = -self.negamax(board, depth - 1, ply + 1, -beta, -alpha, true);
+
+            let gives_check = board.is_in_check(board.turn);
+            let late = i >= 3 && depth >= 3 && quiet && !killer && !in_check && !gives_check;
+
+            let mut score;
+
+            if late {
+                // is it better than alpha?
+                score = -self.negamax(board, depth - 2, ply + 1, -alpha - 1, -alpha, true);
+                if score > alpha {
+                    // verify at full depth
+                    score = -self.negamax(board, depth - 1, ply + 1, -beta, -alpha, true);
+                }
+            } else {
+                score = -self.negamax(board, depth - 1, ply + 1, -beta, -alpha, true);
+            }
+
             board.history.pop();
             board.unmake(m, undo);
             if score >= beta {
                 best_score = score;          // cutoff — opponent won't allow this line
                 best_move = Some(m);
-                let quiet = board.get_piece(m.to).is_none()
-                    && m.promotion.is_none()
-                    && !(m.piece.kind == Pawn && Some(m.to) == board.en_passant);
                 if quiet { self.store_killer(m, ply); }
                 break;
             }
