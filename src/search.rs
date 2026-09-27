@@ -26,6 +26,7 @@ pub struct Search {
     deadline: Option<Instant>,
     stop: bool,
     killers: [[Option<PieceMove>; 2]; MAX_PLY],
+    history: [[[i32; 64]; 64]; 2], // [color][from square][to square], history heuristic, nothing to do with board history!
 }
 
 // mate score
@@ -46,9 +47,14 @@ fn from_tt_score(score: i32, ply: u32) -> i32 {
     else { score }
 }
 
+fn square_to_index(square: (usize, usize)) -> usize {
+    let (file, rank) = square;
+    rank * 8 + file
+}
+
 impl Search {
     pub fn new() -> Search {
-        Search { tt: vec![None; 1 << 20], nodes: 0, deadline: None, stop: false, killers: [[None; 2]; MAX_PLY] }
+        Search { tt: vec![None; 1 << 20], nodes: 0, deadline: None, stop: false, killers: [[None; 2]; MAX_PLY], history: [[[0; 64]; 64]; 2] }
     }
 
     fn check_time(&mut self) {
@@ -148,7 +154,7 @@ impl Search {
             else if board.get_piece(m.to).is_some() { (1, -board.move_score(m)) }
             else if Some(*m) == killers[0] { (2, 0) }
             else if Some(*m) == killers[1] { (3, 0) }
-            else { (4, 0) }
+            else { (4, -self.history[m.piece.color as usize][square_to_index(m.from)][square_to_index(m.to)]) }
         });
 
         for (i, m) in moves.into_iter().enumerate() {
@@ -179,7 +185,10 @@ impl Search {
             if score >= beta {
                 best_score = score;          // cutoff — opponent won't allow this line
                 best_move = Some(m);
-                if quiet { self.store_killer(m, ply); }
+                if quiet {
+                    self.store_killer(m, ply);
+                    self.history[m.piece.color as usize][square_to_index(m.from)][square_to_index(m.to)] += (depth * depth) as i32; // cutoff at high depth is backed by more search
+                }
                 break;
             }
             if score > best_score {
@@ -255,6 +264,7 @@ impl Search {
         self.deadline = None;
         self.nodes = 0;
         self.killers = [[None; 2]; MAX_PLY];
+        self.history = [[[0; 64]; 64]; 2];
         let start = Instant::now();
 
         // depth 1 always completes, so we're guaranteed a legal move
