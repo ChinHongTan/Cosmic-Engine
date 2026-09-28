@@ -8,6 +8,10 @@ impl Board {
     pub(crate) const MATE: i32 = 100_000;
     pub(crate) const INF: i32 = 1_000_000;
 
+
+    const PASSED_MG: [i32; 8] = [0, 5, 10, 15, 25, 40, 60, 0];
+    const PASSED_EG: [i32; 8] = [0, 10, 20, 35, 60, 100, 150, 0];
+
     pub fn evaluate(&self) -> i32 {
         let (mut mg, mut eg, mut phase) = (0, 0, 0);
         for rank in 0..8 {
@@ -18,7 +22,13 @@ impl Board {
                     White => (7 - rank) * 8 + file,
                 };
 
-                let (m, e) = p.kind.score(index);
+                let (mut m, mut e) = p.kind.score(index);
+
+                if p.kind == Pawn && self.is_passed(rank, file, p.color) {
+                    let rel = match p.color { White => rank, Black => 7 - rank };
+                    m += Self::PASSED_MG[rel];
+                    e += Self::PASSED_EG[rel]
+                }
 
                 match p.color {
                     White => { mg += m; eg += e },
@@ -47,5 +57,20 @@ impl Board {
     pub(crate) fn has_non_pawn(&self, color: Color) -> bool {
         self.board_state.iter().flatten().flatten()
             .any(|p| p.color == color && p.kind != King && p.kind != Pawn)
+    }
+
+    fn is_passed(&self, rank: usize, file: usize, color: Color) -> bool {
+        let ahead = match color {
+            White => rank + 1..8,
+            Black => 0..rank
+        };
+        for r in ahead {
+            for f in file.saturating_sub(1)..=(file + 1).min(7) {
+                if let Some(q) = self.board_state[r][f] {
+                    if q.kind == Pawn && q.color != color { return false; }
+                }
+            }
+        }
+        true
     }
 }
