@@ -169,15 +169,26 @@ impl Search {
 
             let mut score;
 
-            if late {
+            // PVS
+            // Cheap: reduced depth, width 1 (late quiet moves only)
+            // Medium: full depth, width 1
+            // Expensive: full depth, full window (better moves only)
+
+            if i == 0 {
+                // first move, get exact score
+                score = -self.negamax(board, depth - 1, ply + 1, -beta, -alpha, true);
+            } else {
+                let reduction = if late { 2 } else { 1 };
                 // is it better than alpha?
-                score = -self.negamax(board, depth - 2, ply + 1, -alpha - 1, -alpha, true);
-                if score > alpha {
-                    // verify at full depth
+                score = -self.negamax(board, depth - reduction, ply + 1, -alpha - 1, -alpha, true);
+                if score > alpha && late {
+                    // surprise at reduced depth, verify at full depth
+                    score = -self.negamax(board, depth - 1, ply + 1, -alpha - 1, -alpha, true);
+                }
+                if score > alpha && score < beta {
+                    // a better move, get exact score
                     score = -self.negamax(board, depth - 1, ply + 1, -beta, -alpha, true);
                 }
-            } else {
-                score = -self.negamax(board, depth - 1, ply + 1, -beta, -alpha, true);
             }
 
             board.history.pop();
@@ -253,7 +264,7 @@ impl Search {
         self.stop = false;
         let mut best = None;
         for depth in 1..=max_depth {
-            best = self.best_move(board, depth, best).0;
+            best = self.best_move(board, depth, best, -Board::INF, Board::INF).0;
             // println!("depth {depth}: {:?}", best)
         }
         best
@@ -268,19 +279,37 @@ impl Search {
         let start = Instant::now();
 
         // depth 1 always completes, so we're guaranteed a legal move
-        let (mut best, score) = self.best_move(board, 1, None);
+        let (mut best, mut score) = self.best_move(board, 1, None, -Board::INF, Board::INF);
         self.print_info(board, 1, score, best, start);
 
         self.deadline = Some(start + hard);
         let mut stability = 0;
-        for depth in 2..=max_depth {
+
+        'deepening: for depth in 2..=max_depth {
             let iter_start = Instant::now();
-            let (m, score) = self.best_move(board, depth, best);
-            if self.stop { break; }
+            let mut delta = 25;
+            let use_window = depth >= 5 && score.abs() < MATE_THRESHOLD;
+            let (mut alpha, mut beta) =
+                if use_window {
+                    (score - delta, score + delta)
+                } else {
+                    (-Board::INF, Board::INF)
+                };
+            // aspiration windows
+            let (m, s) = loop {
+                let (m, s) = self.best_move(board, depth, best, alpha, beta);
+                if self.stop { break 'deepening; }       // out of time, stop the whole search
+                if s <= alpha { alpha -= delta; }        // fail low, widen downward
+                else if s >= beta { beta += delta; }     // fail high, widen upward
+                else { break (m, s); }                   // inside the window, exact
+                delta *= 2;
+            };
+
             if depth >= 3 {
                 if best == m { stability += 1; } else { stability = 0; }
             }
             best = m;
+            score = s;
             self.print_info(board, depth, score, best, start);
             // the longer the best move holds, the sooner we stop looking
             let mult = 10u32.saturating_sub(stability.min(3));
@@ -340,7 +369,7 @@ impl Search {
         pv
     }
 
-    pub fn best_move(&mut self, board: &mut Board, depth: u32, prev: Option<PieceMove>) -> (Option<PieceMove>, i32) {
+    pub fn best_move(&mut self, board: &mut Board, depth: u32, prev: Option<PieceMove>, mut alpha: i32, beta: i32) -> (Option<PieceMove>, i32) {
         let mut moves = Vec::with_capacity(64);
         board.all_legal_moves(&mut moves);
 
@@ -355,7 +384,7 @@ impl Search {
         for m in moves {
             let undo = board.make(m);
             board.history.push(board.hash);
-            let score = -self.negamax(board, depth - 1, 1, -Board::INF, -best_score, true);
+            let score = -self.negamax(board, depth - 1, 1, -beta, -alpha, true);
             board.history.pop();
             board.unmake(m, undo);
 
@@ -363,6 +392,8 @@ impl Search {
                 best_score = score;
                 best_move = Some(m);
             }
+            if score > alpha { alpha = score; }
+            if score >= beta { break; }
         }
 
         (best_move, best_score)
