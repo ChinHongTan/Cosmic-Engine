@@ -135,3 +135,8 @@ This project wouldn't be possible without the help of the following projects:
 - PeSTO evaluation (Ronald Friederich): https://www.talkchess.com/forum3/viewtopic.php?f=2&t=68311&start=19
 - https://github.com/Disservin/fastchess
 - https://github.com/official-stockfish/stockfish
+
+## License
+Copyright (C) 2026 ChinHongTan
+
+Cosmic is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. See [LICENSE](LICENSE) for the full text.
