@@ -127,7 +127,7 @@ fn play_uci() {
 
         match tokens.first().copied() {
             Some("uci") => {
-                println!("id name Cosmos Engine");
+                println!("id name Cosmic Engine");
                 println!("id author Chinono");
                 println!("uciok");
             }

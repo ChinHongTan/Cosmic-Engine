@@ -3,13 +3,6 @@
 version = 4
 
 [[package]]
-name = "RustChess"
-version = "0.1.0"
-dependencies = [
- "rand",
-]
-
-[[package]]
 name = "cfg-if"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -24,6 +17,13 @@ dependencies = [
  "cfg-if",
  "cpufeatures",
  "rand_core",
+]
+
+[[package]]
+name = "cosmic"
+version = "0.1.0"
+dependencies = [
+ "rand",
 ]
 
 [[package]]

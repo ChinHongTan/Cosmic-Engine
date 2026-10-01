@@ -1,1 +1,13 @@
 /target
+
+# local testing tools and data, not part of the engine
+/engines/
+/fastchess/
+/8moves_v3.pgn
+/8moves_v3.pgn.zip
+/config.json
+/profile.json.gz
+
+# OS / IDE
+.DS_Store
+.idea/
